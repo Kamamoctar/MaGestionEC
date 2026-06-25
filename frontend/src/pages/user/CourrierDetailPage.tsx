@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getCourrier, transmettreCourrier, actionParapheur, type ActionParapheur } from "../../api/courriers";
 import { getPostes } from "../../api/postes";
 import { getHistoriqueMouvements, type Mouvement } from "../../api/mouvements";
+import {
+  getPiecesJointes, uploadPieceJointe, supprimerPieceJointe,
+  downloadUrl, formatTaille, iconeType, type PieceJointe,
+} from "../../api/piecesJointes";
+import { useAuthStore } from "../../store/authStore";
 import type { Courrier, Poste } from "../../types";
 
 const PRIORITE_LABELS: Record<string, string> = {
@@ -35,19 +40,24 @@ type PanelMode = "transmettre" | "action" | "annoter" | null;
 export default function CourrierDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { token } = useAuthStore();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [courrier, setCourrier] = useState<Courrier | null>(null);
   const [mouvements, setMouvements] = useState<Mouvement[]>([]);
   const [postes, setPostes] = useState<Poste[]>([]);
+  const [piecesJointes, setPiecesJointes] = useState<PieceJointe[]>([]);
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<PanelMode>(null);
   const [posteDestId, setPosteDestId] = useState("");
   const [commentaire, setCommentaire] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getCourrier(id), getHistoriqueMouvements(id), getPostes()])
-      .then(([c, mvts, ps]) => { setCourrier(c); setMouvements(mvts); setPostes(ps); })
+    Promise.all([getCourrier(id), getHistoriqueMouvements(id), getPostes(), getPiecesJointes(id)])
+      .then(([c, mvts, ps, pjs]) => { setCourrier(c); setMouvements(mvts); setPostes(ps); setPiecesJointes(pjs); })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -56,6 +66,27 @@ export default function CourrierDetailPage() {
     const [c, mvts] = await Promise.all([getCourrier(id), getHistoriqueMouvements(id)]);
     setCourrier(c);
     setMouvements(mvts);
+  }
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const pj = await uploadPieceJointe(id, file);
+      setPiecesJointes((prev) => [...prev, pj]);
+    } catch (err: any) {
+      setUploadError(err?.response?.data?.detail ?? "Erreur lors de l'envoi du fichier");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function handleSupprimerPj(pjId: string) {
+    await supprimerPieceJointe(pjId);
+    setPiecesJointes((prev) => prev.filter((p) => p.id !== pjId));
   }
 
   async function handleTransmettre(e: React.FormEvent) {
@@ -242,6 +273,67 @@ export default function CourrierDetailPage() {
               </form>
             )}
           </div>
+        )}
+      </div>
+
+      {/* Pièces jointes */}
+      <div className="bg-white rounded-xl border p-6 mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-medium text-gray-700">Pièces jointes</h2>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="text-sm px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50"
+          >
+            {uploading ? "Envoi…" : "+ Ajouter"}
+          </button>
+          <input ref={fileRef} type="file" className="hidden" onChange={handleUpload}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.zip" />
+        </div>
+
+        {uploadError && (
+          <p className="text-sm text-red-600 mb-3">{uploadError}</p>
+        )}
+
+        {piecesJointes.length === 0 ? (
+          <p className="text-gray-400 text-sm">Aucune pièce jointe</p>
+        ) : (
+          <ul className="space-y-2">
+            {piecesJointes.map((pj) => (
+              <li key={pj.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100">
+                <span className="text-xl">{iconeType(pj.mime_type)}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{pj.nom_fichier}</p>
+                  <p className="text-xs text-gray-400">{formatTaille(pj.taille_octets)}</p>
+                </div>
+                <a
+                  href={`${downloadUrl(pj.id)}?token=${token}`}
+                  download={pj.nom_fichier}
+                  onClick={(e) => {
+                    // Téléchargement authentifié via fetch blob
+                    e.preventDefault();
+                    fetch(downloadUrl(pj.id), { headers: { Authorization: `Bearer ${token}` } })
+                      .then((r) => r.blob())
+                      .then((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url; a.download = pj.nom_fichier; a.click();
+                        URL.revokeObjectURL(url);
+                      });
+                  }}
+                  className="text-xs px-2 py-1 border rounded-md text-primary hover:bg-blue-50"
+                >
+                  Télécharger
+                </a>
+                <button
+                  onClick={() => handleSupprimerPj(pj.id)}
+                  className="text-xs px-2 py-1 border rounded-md text-red-500 hover:bg-red-50"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, utilisateurs, directions, postes, courriers, flux, bpmn
+from app.routers import auth, utilisateurs, directions, postes, courriers, flux, bpmn, pieces_jointes
 
 app = FastAPI(
     title="GEC — Gestion Électronique des Courriers",
@@ -24,6 +24,7 @@ app.include_router(postes.router)
 app.include_router(courriers.router)
 app.include_router(flux.router)
 app.include_router(bpmn.router)
+app.include_router(pieces_jointes.router)
 
 
 @app.get("/health")
