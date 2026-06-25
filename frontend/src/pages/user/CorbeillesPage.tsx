@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getMesCorbeilles } from "../../api/courriers";
+import { slaStatus } from "../../utils/sla";
 import type { Courrier } from "../../types";
 
 const ETATS = [
@@ -15,15 +16,6 @@ const PRIORITE_COLORS: Record<string, string> = {
   urgent: "bg-orange-100 text-orange-700",
   tres_urgent: "bg-red-100 text-red-700",
 };
-
-function slaStatus(c: Courrier): "retard" | "proche" | null {
-  if (!c.date_limite || c.etat === "traite" || c.etat === "archive") return null;
-  const now = Date.now();
-  const limite = new Date(c.date_limite).getTime();
-  if (limite < now) return "retard";
-  if (limite - now < 48 * 3600 * 1000) return "proche";
-  return null;
-}
 
 export default function CorbeillesPage() {
   const navigate = useNavigate();
