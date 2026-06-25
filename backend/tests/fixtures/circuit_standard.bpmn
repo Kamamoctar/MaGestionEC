@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             id="definitions_gec"
+             targetNamespace="http://bpmn.io/schema/bpmn"
+             name="Circuit Courrier Standard">
+  <process id="process_courrier" name="Circuit Courrier Standard" isExecutable="false">
+    <laneSet id="laneSet_1">
+      <lane id="lane_secretariat" name="Secrétariat Général">
+        <flowNodeRef>startEvent_1</flowNodeRef>
+        <flowNodeRef>task_enregistrement</flowNodeRef>
+      </lane>
+      <lane id="lane_dag" name="Directeur Administratif">
+        <flowNodeRef>task_visa_dag</flowNodeRef>
+        <flowNodeRef>gateway_1</flowNodeRef>
+      </lane>
+      <lane id="lane_dg" name="Directeur Général">
+        <flowNodeRef>task_signature_dg</flowNodeRef>
+        <flowNodeRef>endEvent_1</flowNodeRef>
+      </lane>
+    </laneSet>
+
+    <startEvent id="startEvent_1" name="Réception courrier"/>
+
+    <userTask id="task_enregistrement" name="Enregistrement et distribution"/>
+
+    <userTask id="task_visa_dag" name="Visa DAG"/>
+
+    <exclusiveGateway id="gateway_1" name="Conforme ?"/>
+
+    <userTask id="task_signature_dg" name="Signature Directeur Général"/>
+
+    <endEvent id="endEvent_1" name="Archivage"/>
+
+    <sequenceFlow id="flow_1" sourceRef="startEvent_1"      targetRef="task_enregistrement"/>
+    <sequenceFlow id="flow_2" sourceRef="task_enregistrement" targetRef="task_visa_dag"/>
+    <sequenceFlow id="flow_3" sourceRef="task_visa_dag"      targetRef="gateway_1"/>
+    <sequenceFlow id="flow_4" sourceRef="gateway_1"          targetRef="task_signature_dg" name="Oui"/>
+    <sequenceFlow id="flow_5" sourceRef="task_signature_dg"  targetRef="endEvent_1"/>
+  </process>
+</definitions>
