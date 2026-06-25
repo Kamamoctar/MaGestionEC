@@ -20,3 +20,8 @@ export async function affecterOccupant(posteId: string, utilisateur_id: string, 
   const { data } = await apiClient.put<Poste>(`/postes/${posteId}/occupant`, { utilisateur_id, type });
   return data;
 }
+
+export async function affecterInterimaire(posteId: string, utilisateur_id: string): Promise<Poste> {
+  const { data } = await apiClient.post<Poste>(`/postes/${posteId}/interimaire`, { utilisateur_id });
+  return data;
+}

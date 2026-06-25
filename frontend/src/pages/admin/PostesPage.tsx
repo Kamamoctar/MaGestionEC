@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
 import apiClient from "../../api/client";
-import { getPostes, creerPoste, affecterOccupant } from "../../api/postes";
+import { getPostes, creerPoste, affecterOccupant, affecterInterimaire } from "../../api/postes";
 import type { Poste, Utilisateur } from "../../types";
+
+type PanelMode = "affecter" | "interimaire" | null;
 
 export default function PostesPage() {
   const [postes, setPostes] = useState<Poste[]>([]);
   const [utilisateurs, setUtilisateurs] = useState<Utilisateur[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Formulaire nouveau poste
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [intitule, setIntitule] = useState("");
 
-  // Affectation occupant
-  const [affectPosteId, setAffectPosteId] = useState<string | null>(null);
+  // Panel inline : quel poste + quel mode
+  const [panelPosteId, setPanelPosteId] = useState<string | null>(null);
+  const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [affectLoading, setAffectLoading] = useState(false);
+  const [panelLoading, setPanelLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -33,6 +35,18 @@ export default function PostesPage() {
     return u ? `${u.prenom} ${u.nom}` : id.slice(0, 8) + "…";
   }
 
+  function openPanel(posteId: string, mode: PanelMode, currentUserId?: string | null) {
+    setPanelPosteId(posteId);
+    setPanelMode(mode);
+    setSelectedUserId(mode === "affecter" ? (currentUserId ?? "") : "");
+  }
+
+  function closePanel() {
+    setPanelPosteId(null);
+    setPanelMode(null);
+    setSelectedUserId("");
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const poste = await creerPoste({ intitule });
@@ -41,21 +55,26 @@ export default function PostesPage() {
     setShowCreateForm(false);
   }
 
-  async function handleAffecter(e: React.FormEvent) {
+  async function handlePanelSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!affectPosteId) return;
-    setAffectLoading(true);
+    if (!panelPosteId || !selectedUserId) return;
+    setPanelLoading(true);
     try {
-      const updated = await affecterOccupant(affectPosteId, selectedUserId);
+      let updated: Poste;
+      if (panelMode === "affecter") {
+        updated = await affecterOccupant(panelPosteId, selectedUserId);
+      } else {
+        updated = await affecterInterimaire(panelPosteId, selectedUserId);
+      }
       setPostes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      setAffectPosteId(null);
-      setSelectedUserId("");
+      closePanel();
     } finally {
-      setAffectLoading(false);
+      setPanelLoading(false);
     }
   }
 
   async function handleLiberer(posteId: string) {
+    if (!confirm("Libérer ce poste (retirer l'occupant titulaire) ?")) return;
     const updated = await affecterOccupant(posteId, "");
     setPostes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
@@ -93,7 +112,7 @@ export default function PostesPage() {
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Intitulé</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Occupant</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Occupant titulaire</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Niveau</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Statut</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
@@ -127,12 +146,18 @@ export default function PostesPage() {
                     <span className={`w-2 h-2 rounded-full inline-block ${p.is_active ? "bg-green-500" : "bg-gray-300"}`} />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button
-                        onClick={() => { setAffectPosteId(p.id); setSelectedUserId(p.occupant_user_id ?? ""); }}
+                        onClick={() => openPanel(p.id, "affecter", p.occupant_user_id)}
                         className="text-xs px-2 py-1 border rounded-md text-primary hover:bg-blue-50"
                       >
                         {p.occupant_user_id ? "Changer" : "Affecter"}
+                      </button>
+                      <button
+                        onClick={() => openPanel(p.id, "interimaire")}
+                        className="text-xs px-2 py-1 border rounded-md text-purple-600 hover:bg-purple-50"
+                      >
+                        Intérim
                       </button>
                       {p.occupant_user_id && (
                         <button
@@ -146,15 +171,22 @@ export default function PostesPage() {
                   </td>
                 </tr>
 
-                {/* Inline affectation form */}
-                {affectPosteId === p.id && (
-                  <tr key={`affect-${p.id}`} className="bg-blue-50">
+                {/* Panel inline */}
+                {panelPosteId === p.id && panelMode !== null && (
+                  <tr key={`panel-${p.id}`} className={panelMode === "interimaire" ? "bg-purple-50" : "bg-blue-50"}>
                     <td colSpan={5} className="px-4 py-3">
-                      <form onSubmit={handleAffecter} className="flex gap-3 items-end">
+                      <form onSubmit={handlePanelSubmit} className="flex gap-3 items-end">
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-gray-600 mb-1">
-                            Affecter à « {p.intitule} »
+                            {panelMode === "interimaire"
+                              ? `Désigner un intérimaire pour « ${p.intitule} »`
+                              : `Affecter un titulaire à « ${p.intitule} »`}
                           </label>
+                          {panelMode === "interimaire" && (
+                            <p className="text-xs text-purple-600 mb-2">
+                              L'intérimaire hérite temporairement des courriers et droits de ce poste.
+                            </p>
+                          )}
                           <select
                             value={selectedUserId}
                             onChange={(e) => setSelectedUserId(e.target.value)}
@@ -169,14 +201,16 @@ export default function PostesPage() {
                         </div>
                         <button
                           type="submit"
-                          disabled={affectLoading || !selectedUserId}
-                          className="px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-50"
+                          disabled={panelLoading || !selectedUserId}
+                          className={`px-4 py-2 text-white rounded-lg text-sm disabled:opacity-50 ${
+                            panelMode === "interimaire" ? "bg-purple-600" : "bg-primary"
+                          }`}
                         >
-                          {affectLoading ? "…" : "Confirmer"}
+                          {panelLoading ? "…" : "Confirmer"}
                         </button>
                         <button
                           type="button"
-                          onClick={() => setAffectPosteId(null)}
+                          onClick={closePanel}
                           className="px-3 py-2 text-sm text-gray-500"
                         >
                           Annuler
