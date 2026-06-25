@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel
 
 from app.models.courrier import TypeCourrier, PrioriteCourrier, ConfidentialiteCourrier, EtatCourrier
@@ -40,6 +41,7 @@ class CourrierOut(BaseModel):
     etat: EtatCourrier
     flux_id: str | None
     etape_courante_id: str | None
+    type_action_courante: str | None = None
     created_by_id: str
     created_at: datetime
     updated_at: datetime
@@ -47,4 +49,9 @@ class CourrierOut(BaseModel):
 
 class TransmettreCourrierIn(BaseModel):
     poste_destination_id: str
+    commentaire: str | None = None
+
+
+class ActionCourrierIn(BaseModel):
+    action: Literal["visa", "signature", "annotation", "retour"]
     commentaire: str | None = None

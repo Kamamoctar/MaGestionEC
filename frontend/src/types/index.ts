@@ -33,6 +33,7 @@ export interface Courrier {
   etat: "en_attente" | "en_cours" | "traite" | "archive";
   flux_id: string | null;
   etape_courante_id: string | null;
+  type_action_courante: "distribution" | "visa" | "signature" | "information" | null;
   created_by_id: string;
   created_at: string;
   updated_at: string;

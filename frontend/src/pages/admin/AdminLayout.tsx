@@ -4,6 +4,7 @@ import { useAuthStore } from "../../store/authStore";
 const navItems = [
   { to: "/admin/postes", label: "Postes" },
   { to: "/admin/utilisateurs", label: "Utilisateurs" },
+  { to: "/admin/directions", label: "Directions" },
   { to: "/admin/import-bpmn", label: "Import BPMN" },
 ];
 

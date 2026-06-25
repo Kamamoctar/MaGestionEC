@@ -56,6 +56,12 @@ class Courrier(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    @property
+    def type_action_courante(self) -> str | None:
+        """Retourne le type_action de l'étape courante si le circuit est chargé."""
+        etape = self.__dict__.get("etape_courante")
+        return etape.type_action if etape is not None else None
+
     # Relations
     poste_destinataire: Mapped["Poste"] = relationship("Poste", back_populates="courriers_recus", foreign_keys=[poste_destinataire_id])
     flux: Mapped["Flux | None"] = relationship("Flux", back_populates="courriers")

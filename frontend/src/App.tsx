@@ -7,7 +7,8 @@ import NonAutorisePage from "./pages/NonAutorisePage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import PostesPage from "./pages/admin/PostesPage";
 import UtilisateursPage from "./pages/admin/UtilisateursPage";
-import ImportBpmnPage from "./pages/admin/ImportBpmnPage";
+import ImportBpmnPage from "./pages/admin/ImportBpmnPage"
+import DirectionsPage from "./pages/admin/DirectionsPage";
 
 // Espace Utilisateur
 import UserLayout from "./pages/user/UserLayout";
@@ -28,6 +29,7 @@ export default function App() {
           <Route index element={<Navigate to="/admin/postes" replace />} />
           <Route path="postes" element={<PostesPage />} />
           <Route path="utilisateurs" element={<UtilisateursPage />} />
+          <Route path="directions" element={<DirectionsPage />} />
           <Route path="import-bpmn" element={<ImportBpmnPage />} />
         </Route>
       </Route>
