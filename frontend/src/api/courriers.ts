@@ -26,6 +26,11 @@ export async function transmettreCourrier(id: string, poste_destination_id: stri
   return data;
 }
 
+export async function archiverCourrier(id: string): Promise<Courrier> {
+  const { data } = await apiClient.post<Courrier>(`/courriers/${id}/archiver`);
+  return data;
+}
+
 export type ActionParapheur = "visa" | "signature" | "annotation" | "retour";
 
 export async function actionParapheur(id: string, action: ActionParapheur, commentaire?: string): Promise<Courrier> {

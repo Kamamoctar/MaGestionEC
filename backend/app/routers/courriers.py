@@ -197,6 +197,36 @@ async def action_parapheur(
     return result2.scalar_one()
 
 
+@router.post("/{courrier_id}/archiver", response_model=CourrierOut)
+async def archiver(
+    courrier_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[Utilisateur, Depends(get_current_user)],
+    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+):
+    """Archive un courrier traité — action irréversible."""
+    result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
+    courrier = result.scalar_one_or_none()
+    if not courrier:
+        raise HTTPException(status_code=404, detail="Courrier introuvable")
+    if poste is None or courrier.poste_destinataire_id != poste.id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
+    if courrier.etat != EtatCourrier.traite:
+        raise HTTPException(status_code=400, detail="Seuls les courriers traités peuvent être archivés")
+
+    courrier.etat = EtatCourrier.archive
+    mvt = Mouvement(
+        courrier_id=courrier.id,
+        poste_source_id=poste.id,
+        utilisateur_id=current_user.id,
+        action=ActionMouvement.archive,
+    )
+    db.add(mvt)
+    await db.commit()
+    await db.refresh(courrier)
+    return courrier
+
+
 @router.post("/{courrier_id}/transmettre", response_model=CourrierOut)
 async def transmettre(
     courrier_id: str,

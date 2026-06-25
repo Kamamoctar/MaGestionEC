@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, get_poste_utilisateur
 from app.database import get_db
-from app.models.courrier import Courrier, TypeCourrier, EtatCourrier, PrioriteCourrier
-from app.models.poste import Poste
+from app.models.courrier import Courrier, TypeCourrier, EtatCourrier, PrioriteCourrier, ConfidentialiteCourrier
+from app.models.poste import Poste, NiveauAcces
 from app.models.utilisateur import Utilisateur, RoleFonctionnel
 from app.schemas.courrier import CourrierOut
 
@@ -41,6 +41,9 @@ async def rechercher(
         if poste is None:
             return []
         stmt = stmt.where(Courrier.poste_destinataire_id == poste.id)
+        # Couche 2 confidentialité : masquer les courriers confidentiels si niveau insuffisant
+        if poste.niveau_acces != NiveauAcces.confidentiel:
+            stmt = stmt.where(Courrier.confidentialite != ConfidentialiteCourrier.confidentiel)
 
     # Full-text ILIKE sur objet, expediteur, reference
     if q:

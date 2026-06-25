@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getCourrier, transmettreCourrier, actionParapheur, type ActionParapheur } from "../../api/courriers";
+import { getCourrier, transmettreCourrier, actionParapheur, archiverCourrier, type ActionParapheur } from "../../api/courriers";
 import { getPostes } from "../../api/postes";
 import { getHistoriqueMouvements, type Mouvement } from "../../api/mouvements";
 import {
@@ -119,6 +119,7 @@ export default function CourrierDetailPage() {
   if (!courrier) return <div className="text-red-500 p-8">Courrier introuvable</div>;
 
   const enCours = courrier.etat !== "archive" && courrier.etat !== "traite";
+  const estTraite = courrier.etat === "traite";
   const actionConfig = courrier.type_action_courante
     ? PARAPHEUR_CONFIG[courrier.type_action_courante]
     : null;
@@ -275,6 +276,27 @@ export default function CourrierDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Archivage */}
+      {estTraite && (
+        <div className="bg-white rounded-xl border p-4 mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Courrier traité</p>
+            <p className="text-xs text-gray-400">Archiver pour le retirer des corbeilles actives</p>
+          </div>
+          <button
+            disabled={submitting}
+            onClick={async () => {
+              if (!id || !confirm("Archiver ce courrier ? Cette action est définitive.")) return;
+              setSubmitting(true);
+              try { const c = await archiverCourrier(id); setCourrier(c); } finally { setSubmitting(false); }
+            }}
+            className="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-50"
+          >
+            Archiver
+          </button>
+        </div>
+      )}
 
       {/* Pièces jointes */}
       <div className="bg-white rounded-xl border p-6 mb-4">

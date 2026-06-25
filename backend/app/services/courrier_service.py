@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.courrier import Courrier, EtatCourrier, ConfidentialiteCourrier
+from app.models.flux import FluxEtape
 from app.models.mouvement import Mouvement, ActionMouvement
 from app.models.poste import Poste, NiveauAcces
 from app.models.utilisateur import Utilisateur
@@ -19,11 +20,29 @@ def _generer_reference(type_courrier: str) -> str:
 
 
 async def creer_courrier(db: AsyncSession, data: dict, created_by: Utilisateur) -> Courrier:
+    flux_id = data.get("flux_id")
+    etape_courante_id = None
+
+    # Si un circuit est associé, initialiser sur la première étape
+    if flux_id:
+        first_res = await db.execute(
+            select(FluxEtape)
+            .where(FluxEtape.flux_id == flux_id)
+            .order_by(FluxEtape.ordre)
+            .limit(1)
+        )
+        first_etape = first_res.scalar_one_or_none()
+        if first_etape:
+            etape_courante_id = first_etape.id
+            data["poste_destinataire_id"] = first_etape.poste_id
+
     courrier = Courrier(
         **data,
         id=str(uuid.uuid4()),
         reference=_generer_reference(data["type"]),
         created_by_id=created_by.id,
+        etape_courante_id=etape_courante_id,
+        etat=EtatCourrier.en_cours if etape_courante_id else EtatCourrier.en_attente,
     )
     db.add(courrier)
 

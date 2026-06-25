@@ -5,7 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import require_admin
+from app.core.auth import require_admin, get_current_user
+from app.models.utilisateur import Utilisateur
 from app.database import get_db
 from app.models.flux import Flux, FluxEtape
 from app.schemas.flux import FluxCreate, FluxOut
@@ -13,8 +14,12 @@ from app.schemas.flux import FluxCreate, FluxOut
 router = APIRouter(prefix="/flux", tags=["flux"])
 
 
-@router.get("", response_model=list[FluxOut], dependencies=[Depends(require_admin)])
-async def lister(db: Annotated[AsyncSession, Depends(get_db)]):
+@router.get("", response_model=list[FluxOut])
+async def lister(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[Utilisateur, Depends(get_current_user)],
+):
+    """Liste les circuits disponibles — accessible à tout utilisateur authentifié (sélection à l'enregistrement)."""
     result = await db.execute(select(Flux).options(selectinload(Flux.etapes)).order_by(Flux.nom))
     return list(result.scalars().all())
 

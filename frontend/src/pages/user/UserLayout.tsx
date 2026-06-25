@@ -61,6 +61,14 @@ export default function UserLayout() {
               Espace admin →
             </NavLink>
           )}
+          <NavLink
+            to="/app/aide"
+            className={({ isActive }) =>
+              `block px-3 py-2 text-xs transition-colors ${isActive ? "text-white" : "text-gray-400 hover:text-white"}`
+            }
+          >
+            Aide & documentation
+          </NavLink>
           <button onClick={logout} className="block w-full text-left px-3 py-2 text-xs text-gray-400 hover:text-white">
             Déconnexion
           </button>

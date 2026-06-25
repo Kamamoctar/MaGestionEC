@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./router/PrivateRoute";
 import LoginPage from "./pages/LoginPage";
 import NonAutorisePage from "./pages/NonAutorisePage";
+import AidePage from "./pages/AidePage";
 
 // Espace Admin
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="utilisateurs" element={<UtilisateursPage />} />
           <Route path="directions" element={<DirectionsPage />} />
           <Route path="import-bpmn" element={<ImportBpmnPage />} />
+          <Route path="aide" element={<AidePage />} />
         </Route>
       </Route>
 
@@ -45,6 +47,7 @@ export default function App() {
           <Route path="recherche" element={<RecherchePage />} />
           <Route path="courriers/:id" element={<CourrierDetailPage />} />
           <Route path="enregistrement" element={<EnregistrementPage />} />
+          <Route path="aide" element={<AidePage />} />
         </Route>
       </Route>
 
