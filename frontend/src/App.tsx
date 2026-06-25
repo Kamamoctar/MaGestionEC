@@ -7,12 +7,14 @@ import NonAutorisePage from "./pages/NonAutorisePage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import PostesPage from "./pages/admin/PostesPage";
 import UtilisateursPage from "./pages/admin/UtilisateursPage";
-import ImportBpmnPage from "./pages/admin/ImportBpmnPage"
+import ImportBpmnPage from "./pages/admin/ImportBpmnPage";
 import DirectionsPage from "./pages/admin/DirectionsPage";
 
 // Espace Utilisateur
 import UserLayout from "./pages/user/UserLayout";
+import DashboardPage from "./pages/user/DashboardPage";
 import CorbeillesPage from "./pages/user/CorbeillesPage";
+import RecherchePage from "./pages/user/RecherchePage";
 import CourrierDetailPage from "./pages/user/CourrierDetailPage";
 import EnregistrementPage from "./pages/user/EnregistrementPage";
 
@@ -37,8 +39,10 @@ export default function App() {
       {/* Espace Utilisateur — tout rôle authentifié */}
       <Route element={<PrivateRoute />}>
         <Route path="/app" element={<UserLayout />}>
-          <Route index element={<Navigate to="/app/corbeilles" replace />} />
+          <Route index element={<Navigate to="/app/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="corbeilles" element={<CorbeillesPage />} />
+          <Route path="recherche" element={<RecherchePage />} />
           <Route path="courriers/:id" element={<CourrierDetailPage />} />
           <Route path="enregistrement" element={<EnregistrementPage />} />
         </Route>

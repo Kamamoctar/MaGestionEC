@@ -2,8 +2,10 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 
 const navItems = [
+  { to: "/app/dashboard", label: "Tableau de bord" },
   { to: "/app/corbeilles", label: "Mes corbeilles" },
-  { to: "/app/enregistrement", label: "Enregistrer un courrier" },
+  { to: "/app/recherche", label: "Recherche" },
+  { to: "/app/enregistrement", label: "Enregistrer" },
 ];
 
 export default function UserLayout() {
