@@ -14,8 +14,15 @@ from dataclasses import dataclass, field
 
 from lxml import etree
 
-# Namespace BPMN 2.0 standard
-BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
+# Namespaces BPMN connus (OMG standard + variantes outils)
+_KNOWN_BPMN_NS = [
+    "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    "http://www.omg.org/spec/BPMN/20100524/MODEL/",
+    "http://www.omg.org/spec/bpmn/20100524/MODEL",
+    "http://www.omg.org/spec/bpmn/20100524/model",
+    "http://b3mn.org/stencilset/bpmn2.0#",
+]
+BPMN_NS = _KNOWN_BPMN_NS[0]
 B = f"{{{BPMN_NS}}}"
 
 # Éléments considérés comme des tâches exécutables
@@ -32,6 +39,45 @@ _ACTION_KEYWORDS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"inform(ation|er)|notif|pour info", re.I), "information"),
     (re.compile(r"distrib|enregistr|transmett|router|dispatch", re.I), "distribution"),
 ]
+
+
+def _detect_bpmn_namespace(root: etree._Element) -> str:
+    """
+    Cherche le namespace BPMN dans tous les namespaces déclarés.
+    Retourne une chaîne vide si le fichier n'utilise pas de namespace (rare mais possible).
+    """
+    all_ns: dict[str, str] = {}
+    # Collecter tous les nsmap de l'arbre (pas seulement la racine)
+    for el in root.iter():
+        all_ns.update(el.nsmap)
+
+    # 1. Chercher un namespace connu exact
+    for known in _KNOWN_BPMN_NS:
+        if known in all_ns.values():
+            return known
+
+    # 2. Chercher par heuristique (contient "bpmn" et "model" ou "omg")
+    for v in all_ns.values():
+        if v and "bpmn" in v.lower() and ("model" in v.lower() or "omg" in v.lower()):
+            return v
+
+    # 3. Chercher par présence d'un élément <process> ou <definitions>
+    for el in root.iter():
+        local = etree.QName(el.tag).localname if "{" in el.tag else el.tag
+        ns = etree.QName(el.tag).namespace if "{" in el.tag else None
+        if local in ("process", "definitions", "lane") and ns:
+            return ns
+
+    return ""  # fichier sans namespace explicite
+
+
+def _iter_local(root: etree._Element, local_name: str):
+    """Itère tous les éléments dont le nom local correspond, quel que soit le namespace."""
+    for el in root.iter():
+        tag = el.tag
+        lname = etree.QName(tag).localname if "{" in tag else tag
+        if lname == local_name:
+            yield el
 
 
 def _detect_action(task_name: str) -> str:
@@ -72,22 +118,24 @@ def analyser_bpmn(xml_content: str | bytes) -> BpmnAnalyse:
     except etree.XMLSyntaxError as exc:
         raise ValueError(f"XML invalide : {exc}") from exc
 
-    # Normaliser le namespace (certains outils omettent le NS)
-    ns_map = root.nsmap
-    bpmn_ns = next((v for v in ns_map.values() if "BPMN" in v.upper()), BPMN_NS)
-    b = f"{{{bpmn_ns}}}"
+    # Détecter le namespace BPMN utilisé par ce fichier (compatible tous outils)
+    bpmn_ns = _detect_bpmn_namespace(root)
+    b = f"{{{bpmn_ns}}}" if bpmn_ns else ""
 
     task_tags_local = {
         f"{b}task", f"{b}userTask", f"{b}manualTask",
         f"{b}serviceTask", f"{b}sendTask", f"{b}receiveTask",
         f"{b}scriptTask", f"{b}businessRuleTask",
+        # sans namespace (certains fichiers draw.io n'en ont pas)
+        "task", "userTask", "manualTask", "serviceTask",
+        "sendTask", "receiveTask", "scriptTask", "businessRuleTask",
     }
 
     # ── 1. Nom du processus ──────────────────────────────────────────────
-    process_el = root.find(f".//{b}process")
+    process_el = next(_iter_local(root, "process"), None)
     nom_processus = (process_el.get("name") or "Circuit") if process_el is not None else "Circuit"
 
-    # ── 2. Catalogue id→tag+name pour tous les éléments ─────────────────
+    # ── 2. Catalogue id→élément pour tous les nœuds ─────────────────────
     id_to_el: dict[str, etree._Element] = {}
     for el in root.iter():
         eid = el.get("id")
@@ -95,16 +143,23 @@ def analyser_bpmn(xml_content: str | bytes) -> BpmnAnalyse:
             id_to_el[eid] = el
 
     # ── 3. Lanes ─────────────────────────────────────────────────────────
-    lane_els = list(root.iter(f"{b}lane"))
+    lane_els = list(_iter_local(root, "lane"))
     if not lane_els:
-        raise ValueError("Aucune lane trouvée dans ce fichier BPMN. "
-                         "Assurez-vous que le processus utilise des Swimlanes.")
+        raise ValueError(
+            "Aucune lane (swimlane) trouvée dans ce fichier BPMN. "
+            "Assurez-vous que votre processus utilise des Swimlanes/Pools. "
+            "Les outils supportés : bpmn.io, Camunda Modeler, Signavio."
+        )
 
     lanes: list[LaneDetecte] = []
     for lane_el in lane_els:
         lane_id = lane_el.get("id", "")
         lane_name = lane_el.get("name", "Sans nom")
-        node_refs = [ref.text.strip() for ref in lane_el.iter(f"{b}flowNodeRef") if ref.text]
+        node_refs = [
+            ref.text.strip()
+            for ref in _iter_local(lane_el, "flowNodeRef")
+            if ref.text
+        ]
 
         # Garder uniquement les tâches réelles
         task_names = []
@@ -124,15 +179,14 @@ def analyser_bpmn(xml_content: str | bytes) -> BpmnAnalyse:
         ))
 
     # ── 4. Ordre topologique via sequenceFlow ────────────────────────────
-    # Construire le graphe de flux
     adj: dict[str, list[str]] = {eid: [] for eid in id_to_el}
-    for sf in root.iter(f"{b}sequenceFlow"):
+    for sf in _iter_local(root, "sequenceFlow"):
         src, tgt = sf.get("sourceRef"), sf.get("targetRef")
         if src and tgt:
             adj.setdefault(src, []).append(tgt)
 
     # BFS depuis le startEvent
-    start_ids = [el.get("id") for el in root.iter(f"{b}startEvent") if el.get("id")]
+    start_ids = [el.get("id") for el in _iter_local(root, "startEvent") if el.get("id")]
     visited_tasks: list[str] = []  # IDs de tâches dans l'ordre de visite
     visited: set[str] = set()
     queue: deque[str] = deque(start_ids)

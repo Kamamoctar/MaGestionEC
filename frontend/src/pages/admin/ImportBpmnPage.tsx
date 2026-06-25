@@ -54,7 +54,11 @@ export default function ImportBpmnPage() {
       );
       setEtape("mapping");
     } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Erreur lors de l'analyse du fichier");
+      if (!e.response) {
+        setError("Impossible de joindre le serveur. Vérifiez que le backend est démarré (port 8000).");
+      } else {
+        setError(e.response.data?.detail ?? `Erreur ${e.response.status} lors de l'analyse du fichier`);
+      }
     } finally {
       setLoading(false);
     }
@@ -97,7 +101,11 @@ export default function ImportBpmnPage() {
       setFluxCree({ id: flux.id, nom: flux.nom });
       setEtape("succes");
     } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Erreur lors de la génération du circuit");
+      if (!e.response) {
+        setError("Impossible de joindre le serveur. Vérifiez que le backend est démarré (port 8000).");
+      } else {
+        setError(e.response.data?.detail ?? `Erreur ${e.response.status} lors de la génération du circuit`);
+      }
     } finally {
       setLoading(false);
     }
