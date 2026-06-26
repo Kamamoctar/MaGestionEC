@@ -1,10 +1,11 @@
 import apiClient from "./client";
 import type { Courrier } from "../types";
 
-export async function getMesCorbeilles(etat?: string): Promise<Courrier[]> {
-  const { data } = await apiClient.get<Courrier[]>("/courriers/mes-corbeilles", {
-    params: etat ? { etat } : {},
-  });
+export async function getMesCorbeilles(etat?: string, type_action?: string): Promise<Courrier[]> {
+  const params: Record<string, string> = {};
+  if (etat) params.etat = etat;
+  if (type_action) params.type_action = type_action;
+  const { data } = await apiClient.get<Courrier[]>("/courriers/mes-corbeilles", { params });
   return data;
 }
 

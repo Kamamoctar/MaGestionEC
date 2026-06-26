@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import apiClient from "../../api/client";
-import { getPostes, creerPoste, affecterOccupant, affecterInterimaire } from "../../api/postes";
+import { getPostes, creerPoste, affecterOccupant, affecterInterimaire, affecterDelegation } from "../../api/postes";
 import type { Poste, Utilisateur } from "../../types";
 
-type PanelMode = "affecter" | "interimaire" | null;
+type PanelMode = "affecter" | "interimaire" | "delegation" | null;
 
 export default function PostesPage() {
   const [postes, setPostes] = useState<Poste[]>([]);
@@ -63,8 +63,10 @@ export default function PostesPage() {
       let updated: Poste;
       if (panelMode === "affecter") {
         updated = await affecterOccupant(panelPosteId, selectedUserId);
-      } else {
+      } else if (panelMode === "interimaire") {
         updated = await affecterInterimaire(panelPosteId, selectedUserId);
+      } else {
+        updated = await affecterDelegation(panelPosteId, selectedUserId);
       }
       setPostes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       closePanel();
@@ -159,6 +161,12 @@ export default function PostesPage() {
                       >
                         Intérim
                       </button>
+                      <button
+                        onClick={() => openPanel(p.id, "delegation")}
+                        className="text-xs px-2 py-1 border rounded-md text-amber-600 hover:bg-amber-50"
+                      >
+                        Déléguer
+                      </button>
                       {p.occupant_user_id && (
                         <button
                           onClick={() => handleLiberer(p.id)}
@@ -173,18 +181,28 @@ export default function PostesPage() {
 
                 {/* Panel inline */}
                 {panelPosteId === p.id && panelMode !== null && (
-                  <tr key={`panel-${p.id}`} className={panelMode === "interimaire" ? "bg-purple-50" : "bg-blue-50"}>
+                  <tr key={`panel-${p.id}`} className={
+                    panelMode === "interimaire" ? "bg-purple-50" :
+                    panelMode === "delegation" ? "bg-amber-50" : "bg-blue-50"
+                  }>
                     <td colSpan={5} className="px-4 py-3">
                       <form onSubmit={handlePanelSubmit} className="flex gap-3 items-end">
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-gray-600 mb-1">
                             {panelMode === "interimaire"
                               ? `Désigner un intérimaire pour « ${p.intitule} »`
+                              : panelMode === "delegation"
+                              ? `Déléguer les droits de « ${p.intitule} »`
                               : `Affecter un titulaire à « ${p.intitule} »`}
                           </label>
                           {panelMode === "interimaire" && (
                             <p className="text-xs text-purple-600 mb-2">
                               L'intérimaire hérite temporairement des courriers et droits de ce poste.
+                            </p>
+                          )}
+                          {panelMode === "delegation" && (
+                            <p className="text-xs text-amber-600 mb-2">
+                              Le titulaire reste en place. La délégation donne accès temporairement aux courriers du poste à la personne désignée.
                             </p>
                           )}
                           <select
@@ -203,7 +221,8 @@ export default function PostesPage() {
                           type="submit"
                           disabled={panelLoading || !selectedUserId}
                           className={`px-4 py-2 text-white rounded-lg text-sm disabled:opacity-50 ${
-                            panelMode === "interimaire" ? "bg-purple-600" : "bg-primary"
+                            panelMode === "interimaire" ? "bg-purple-600" :
+                            panelMode === "delegation" ? "bg-amber-600" : "bg-primary"
                           }`}
                         >
                           {panelLoading ? "…" : "Confirmer"}

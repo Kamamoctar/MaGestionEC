@@ -10,8 +10,8 @@ from app.database import get_db
 from app.models.poste import Poste
 from app.models.utilisateur import Utilisateur
 from app.models.poste_affectation import PosteAffectation
-from app.schemas.poste import PosteCreate, PosteOut, PosteDetailOut, PosteUpdate, AffectationOccupantIn, InterimaireIn
-from app.services.poste_service import changer_occupant, affecter_interimaire, get_historique_affectations
+from app.schemas.poste import PosteCreate, PosteOut, PosteDetailOut, PosteUpdate, AffectationOccupantIn, InterimaireIn, DelegationIn
+from app.services.poste_service import changer_occupant, affecter_interimaire, affecter_delegation, get_historique_affectations
 
 router = APIRouter(prefix="/postes", tags=["postes"])
 
@@ -87,6 +87,16 @@ async def affecter_interim(poste_id: str, data: InterimaireIn, db: Annotated[Asy
     if not poste:
         raise HTTPException(status_code=404, detail="Poste introuvable")
     return await affecter_interimaire(db, poste, data.utilisateur_id)
+
+
+@router.post("/{poste_id}/delegation", response_model=PosteOut, dependencies=[Depends(require_admin)])
+async def affecter_delegation_route(poste_id: str, data: DelegationIn, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Enregistre une délégation sans changer l'occupant titulaire."""
+    result = await db.execute(select(Poste).where(Poste.id == poste_id))
+    poste = result.scalar_one_or_none()
+    if not poste:
+        raise HTTPException(status_code=404, detail="Poste introuvable")
+    return await affecter_delegation(db, poste, data.utilisateur_id)
 
 
 @router.get("/{poste_id}/historique", dependencies=[Depends(require_admin)])

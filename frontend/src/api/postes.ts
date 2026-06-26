@@ -25,3 +25,8 @@ export async function affecterInterimaire(posteId: string, utilisateur_id: strin
   const { data } = await apiClient.post<Poste>(`/postes/${posteId}/interimaire`, { utilisateur_id });
   return data;
 }
+
+export async function affecterDelegation(posteId: string, utilisateur_id: string): Promise<Poste> {
+  const { data } = await apiClient.post<Poste>(`/postes/${posteId}/delegation`, { utilisateur_id });
+  return data;
+}

@@ -31,6 +31,7 @@ async def enregistrer(
 async def mes_corbeilles(
     *,
     etat: str | None = None,
+    type_action: str | None = None,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
     poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
@@ -38,7 +39,7 @@ async def mes_corbeilles(
     """Retourne les courriers du POSTE de l'utilisateur connecté (couche 2 de sécurité)."""
     if poste is None:
         return []
-    return await get_courriers_poste(db, poste, etat)
+    return await get_courriers_poste(db, poste, etat, type_action)
 
 
 @router.get("/{courrier_id}", response_model=CourrierOut)

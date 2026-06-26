@@ -78,6 +78,39 @@ async def affecter_interimaire(
     return poste
 
 
+async def affecter_delegation(
+    db: AsyncSession,
+    poste: Poste,
+    delegataire_id: str,
+) -> Poste:
+    """
+    Enregistre une délégation sans changer l'occupant titulaire :
+    le titulaire reste en poste mais délègue ses droits à quelqu'un d'autre.
+    """
+    now = datetime.now(timezone.utc)
+    # Clôturer les délégations actives précédentes sur ce poste
+    from sqlalchemy import update
+    await db.execute(
+        update(PosteAffectation)
+        .where(
+            PosteAffectation.poste_id == poste.id,
+            PosteAffectation.type == TypeAffectation.delegation,
+            PosteAffectation.date_fin == None,
+        )
+        .values(date_fin=now)
+    )
+    affectation = PosteAffectation(
+        poste_id=poste.id,
+        utilisateur_id=delegataire_id,
+        date_debut=now,
+        type=TypeAffectation.delegation,
+    )
+    db.add(affectation)
+    await db.commit()
+    await db.refresh(poste)
+    return poste
+
+
 async def get_historique_affectations(db: AsyncSession, poste_id: str) -> list[PosteAffectation]:
     result = await db.execute(
         select(PosteAffectation)

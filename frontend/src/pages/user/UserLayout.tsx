@@ -1,12 +1,27 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { getDashboardStats } from "../../api/dashboard";
+import { useNotifications, type NotifEvent } from "../../hooks/useNotifications";
+
+interface Toast {
+  id: number;
+  message: string;
+  reference: string;
+  priorite: string;
+}
+
+const PRIORITE_TOAST: Record<string, string> = {
+  tres_urgent: "border-red-400 bg-red-50",
+  urgent:      "border-orange-400 bg-orange-50",
+  normal:      "border-blue-300 bg-blue-50",
+};
 
 export default function UserLayout() {
   const { utilisateur, logout } = useAuthStore();
   const isAdmin = utilisateur?.role_fonctionnel === "admin";
   const [enRetard, setEnRetard] = useState(0);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => {
     getDashboardStats()
@@ -14,11 +29,27 @@ export default function UserLayout() {
       .catch(() => {});
   }, []);
 
+  const handleNotif = useCallback((e: NotifEvent) => {
+    if (e.type !== "nouveau_courrier") return;
+    const id = Date.now();
+    const toast: Toast = {
+      id,
+      message: e.objet,
+      reference: e.reference,
+      priorite: e.priorite,
+    };
+    setToasts((prev) => [...prev.slice(-3), toast]); // max 4 toasts simultanés
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 6000);
+    // Incrémenter le badge si retard (la valeur réelle sera rafraîchie au prochain cycle)
+  }, []);
+
+  useNotifications(handleNotif);
+
   const navItems = [
-    { to: "/app/dashboard", label: "Tableau de bord" },
-    { to: "/app/corbeilles", label: "Mes corbeilles", badge: enRetard },
-    { to: "/app/recherche", label: "Recherche" },
-    { to: "/app/enregistrement", label: "Enregistrer" },
+    { to: "/app/dashboard",     label: "Tableau de bord" },
+    { to: "/app/corbeilles",    label: "Mes corbeilles", badge: enRetard },
+    { to: "/app/recherche",     label: "Recherche" },
+    { to: "/app/enregistrement",label: "Enregistrer" },
   ];
 
   return (
@@ -78,6 +109,30 @@ export default function UserLayout() {
       <main className="flex-1 p-8 overflow-auto">
         <Outlet />
       </main>
+
+      {/* Toasts notifications temps réel */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-50 max-w-sm">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`flex items-start gap-3 p-3 rounded-xl border shadow-lg text-sm animate-in slide-in-from-bottom-4 duration-300 ${PRIORITE_TOAST[t.priorite] ?? "border-blue-300 bg-blue-50"}`}
+            >
+              <span className="text-blue-600 text-lg shrink-0">📬</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-800 text-xs">Nouveau courrier — {t.reference}</p>
+                <p className="text-gray-600 truncate">{t.message}</p>
+              </div>
+              <button
+                onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                className="shrink-0 text-gray-400 hover:text-gray-600 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

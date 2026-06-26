@@ -118,6 +118,14 @@ describe("CorbeillesPage", () => {
     await waitFor(() => screen.getByText("À traiter"));
 
     await userEvent.click(screen.getByText("À traiter"));
-    expect(getMesCorbeilles).toHaveBeenCalledWith("en_attente");
+    expect(getMesCorbeilles).toHaveBeenCalledWith("en_attente", undefined);
+  });
+
+  it("filtre l'onglet Pour information avec type_action=information", async () => {
+    renderCorbeilles();
+    await waitFor(() => screen.getByText("Pour information"));
+
+    await userEvent.click(screen.getByText("Pour information"));
+    expect(getMesCorbeilles).toHaveBeenCalledWith(undefined, "information");
   });
 });

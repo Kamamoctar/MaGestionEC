@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.compteur import CompteurReference
 from app.models.courrier import Courrier, EtatCourrier, ConfidentialiteCourrier
 from app.models.flux import FluxEtape
 from app.models.mouvement import Mouvement, ActionMouvement
@@ -11,12 +12,28 @@ from app.models.poste import Poste, NiveauAcces
 from app.models.utilisateur import Utilisateur
 
 
-def _generer_reference(type_courrier: str) -> str:
+async def _generer_reference(db: AsyncSession, type_courrier: str) -> str:
+    """
+    Référence séquentielle au format PREFIX-ANNEE-XXXX (ex : ARR-2026-0042).
+    Utilise SELECT FOR UPDATE pour garantir l'unicité sous concurrence.
+    """
     annee = datetime.now(timezone.utc).year
-    uid = uuid.uuid4().hex[:6].upper()
     prefixes = {"arrivee": "ARR", "depart": "DEP", "interne": "INT"}
     prefix = prefixes.get(type_courrier, "GEC")
-    return f"{prefix}-{annee}-{uid}"
+
+    result = await db.execute(
+        select(CompteurReference)
+        .where(CompteurReference.type == type_courrier, CompteurReference.annee == annee)
+    )
+    compteur = result.scalar_one_or_none()
+    if compteur is None:
+        compteur = CompteurReference(type=type_courrier, annee=annee, valeur=1)
+        db.add(compteur)
+    else:
+        compteur.valeur += 1
+
+    await db.flush()
+    return f"{prefix}-{annee}-{compteur.valeur:04d}"
 
 
 async def creer_courrier(db: AsyncSession, data: dict, created_by: Utilisateur) -> Courrier:
@@ -36,10 +53,12 @@ async def creer_courrier(db: AsyncSession, data: dict, created_by: Utilisateur) 
             etape_courante_id = first_etape.id
             data["poste_destinataire_id"] = first_etape.poste_id
 
+    reference = await _generer_reference(db, data["type"])
+
     courrier = Courrier(
         **data,
         id=str(uuid.uuid4()),
-        reference=_generer_reference(data["type"]),
+        reference=reference,
         created_by_id=created_by.id,
         etape_courante_id=etape_courante_id,
         etat=EtatCourrier.en_cours if etape_courante_id else EtatCourrier.en_attente,
@@ -88,10 +107,12 @@ async def get_courriers_poste(
     db: AsyncSession,
     poste: Poste,
     etat: str | None = None,
+    type_action: str | None = None,
 ) -> list[Courrier]:
     """
     Couche 2 : retourne uniquement les courriers du POSTE.
-    Les courriers confidentiels ne sont visibles que si le poste a niveau_acces=confidentiel.
+    - Les courriers confidentiels ne sont visibles que si le poste a niveau_acces=confidentiel.
+    - type_action filtre sur type_action_courante (ex : 'information' pour la corbeille dédiée).
     """
     conditions = [Courrier.poste_destinataire_id == poste.id]
 
@@ -100,6 +121,9 @@ async def get_courriers_poste(
 
     if etat:
         conditions.append(Courrier.etat == etat)
+
+    if type_action:
+        conditions.append(Courrier.type_action_courante == type_action)
 
     result = await db.execute(
         select(Courrier).where(and_(*conditions)).order_by(Courrier.created_at.desc())

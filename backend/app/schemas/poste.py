@@ -40,3 +40,7 @@ class AffectationOccupantIn(BaseModel):
 
 class InterimaireIn(BaseModel):
     utilisateur_id: str
+
+
+class DelegationIn(BaseModel):
+    utilisateur_id: str
