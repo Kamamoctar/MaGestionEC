@@ -32,6 +32,11 @@ const fakeCourrier: Courrier = {
   poste_destinataire_id: "p1",
   confidentialite: "normal",
   type_action_courante: null,
+  flux_id: null,
+  etape_courante_id: null,
+  created_by_id: "u1",
+  created_at: "2026-05-01T08:00:00Z",
+  updated_at: "2026-05-01T08:00:00Z",
 };
 
 function renderRecherche() {

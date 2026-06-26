@@ -1,11 +1,28 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 
-const navItems = [
-  { to: "/admin/postes", label: "Postes" },
-  { to: "/admin/utilisateurs", label: "Utilisateurs" },
-  { to: "/admin/directions", label: "Directions" },
-  { to: "/admin/import-bpmn", label: "Import BPMN" },
+const navGroups = [
+  {
+    label: "Configuration",
+    items: [
+      { to: "/admin/postes", label: "Postes" },
+      { to: "/admin/utilisateurs", label: "Utilisateurs" },
+      { to: "/admin/directions", label: "Directions" },
+    ],
+  },
+  {
+    label: "Circuits",
+    items: [
+      { to: "/admin/circuits", label: "Gestion circuits" },
+      { to: "/admin/import-bpmn", label: "Import BPMN" },
+    ],
+  },
+  {
+    label: "Pilotage",
+    items: [
+      { to: "/admin/supervision", label: "Supervision" },
+    ],
+  },
 ];
 
 export default function AdminLayout() {
@@ -19,19 +36,28 @@ export default function AdminLayout() {
           <p className="font-bold text-lg">GEC Admin</p>
           <p className="text-xs text-blue-300 mt-0.5">{utilisateur?.prenom} {utilisateur?.nom}</p>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? "bg-white text-primary" : "text-blue-100 hover:bg-blue-800"
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
+        <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
+          {navGroups.map((group) => (
+            <div key={group.label}>
+              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-400">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      `block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isActive ? "bg-white text-primary" : "text-blue-100 hover:bg-blue-800"
+                      }`
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="p-3 border-t border-blue-800">

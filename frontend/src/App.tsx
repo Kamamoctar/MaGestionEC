@@ -10,6 +10,8 @@ import PostesPage from "./pages/admin/PostesPage";
 import UtilisateursPage from "./pages/admin/UtilisateursPage";
 import ImportBpmnPage from "./pages/admin/ImportBpmnPage";
 import DirectionsPage from "./pages/admin/DirectionsPage";
+import SupervisionPage from "./pages/admin/SupervisionPage";
+import CircuitsPage from "./pages/admin/CircuitsPage";
 
 // Espace Utilisateur
 import UserLayout from "./pages/user/UserLayout";
@@ -34,6 +36,8 @@ export default function App() {
           <Route path="utilisateurs" element={<UtilisateursPage />} />
           <Route path="directions" element={<DirectionsPage />} />
           <Route path="import-bpmn" element={<ImportBpmnPage />} />
+          <Route path="supervision" element={<SupervisionPage />} />
+          <Route path="circuits" element={<CircuitsPage />} />
           <Route path="aide" element={<AidePage />} />
         </Route>
       </Route>
