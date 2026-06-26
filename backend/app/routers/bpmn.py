@@ -96,6 +96,8 @@ async def generer(data: GenererFluxIn, db: Annotated[AsyncSession, Depends(get_d
     await db.commit()
 
     result = await db.execute(
-        select(Flux).options(selectinload(Flux.etapes)).where(Flux.id == flux.id)
+        select(Flux)
+        .options(selectinload(Flux.etapes).selectinload(FluxEtape.poste))
+        .where(Flux.id == flux.id)
     )
     return result.scalar_one()

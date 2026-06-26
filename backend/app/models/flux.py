@@ -44,3 +44,7 @@ class FluxEtape(Base):
     poste: Mapped["Poste"] = relationship("Poste", back_populates="etapes_flux")
     courriers_en_cours: Mapped[list["Courrier"]] = relationship("Courrier", back_populates="etape_courante", foreign_keys="Courrier.etape_courante_id")
     mouvements: Mapped[list["Mouvement"]] = relationship("Mouvement", back_populates="flux_etape")
+
+    @property
+    def intitule_poste(self) -> str | None:
+        return self.poste.intitule if self.poste else None

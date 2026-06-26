@@ -24,6 +24,7 @@ class FluxEtapeOut(BaseModel):
     flux_id: str
     ordre: int
     poste_id: str
+    intitule_poste: str | None = None
     type_action: TypeAction
     condition_transition: str | None
     is_terminal: bool

@@ -114,8 +114,9 @@ export default function CircuitsPage() {
                               {e.ordre}
                             </div>
                             <div className="flex-1">
-                              <span className="text-gray-700">Poste : </span>
-                              <span className="font-medium text-gray-800">{e.poste_id}</span>
+                              <span className="font-medium text-gray-800">
+                                {e.intitule_poste ?? e.poste_id}
+                              </span>
                             </div>
                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${ACTION_COLORS[e.type_action] ?? "bg-gray-100 text-gray-600"}`}>
                               {ACTION_LABELS[e.type_action] ?? e.type_action}

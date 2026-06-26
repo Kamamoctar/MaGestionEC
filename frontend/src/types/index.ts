@@ -50,6 +50,7 @@ export interface FluxEtape {
   flux_id: string;
   ordre: number;
   poste_id: string;
+  intitule_poste: string | null;
   type_action: "distribution" | "visa" | "signature" | "information";
   condition_transition: string | null;
   is_terminal: boolean;

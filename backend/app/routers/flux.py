@@ -20,7 +20,7 @@ async def lister(
     _: Annotated[Utilisateur, Depends(get_current_user)],
 ):
     """Liste les circuits disponibles — accessible à tout utilisateur authentifié (sélection à l'enregistrement)."""
-    result = await db.execute(select(Flux).options(selectinload(Flux.etapes)).order_by(Flux.nom))
+    result = await db.execute(select(Flux).options(selectinload(Flux.etapes).selectinload(FluxEtape.poste)).order_by(Flux.nom))
     return list(result.scalars().all())
 
 
@@ -37,14 +37,16 @@ async def creer(data: FluxCreate, db: Annotated[AsyncSession, Depends(get_db)]):
     await db.commit()
     await db.refresh(flux)
 
-    result = await db.execute(select(Flux).options(selectinload(Flux.etapes)).where(Flux.id == flux.id))
+    result = await db.execute(
+        select(Flux).options(selectinload(Flux.etapes).selectinload(FluxEtape.poste)).where(Flux.id == flux.id)
+    )
     return result.scalar_one()
 
 
 @router.get("/{flux_id}", response_model=FluxOut, dependencies=[Depends(require_admin)])
 async def obtenir(flux_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(
-        select(Flux).options(selectinload(Flux.etapes)).where(Flux.id == flux_id)
+        select(Flux).options(selectinload(Flux.etapes).selectinload(FluxEtape.poste)).where(Flux.id == flux_id)
     )
     flux = result.scalar_one_or_none()
     if not flux:
