@@ -5,17 +5,24 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, get_poste_utilisateur, peut_voir_courrier_confidentiel, require_secretariat
+from app.core.auth import get_current_user, get_postes_utilisateur, poste_peut_acceder_courrier, require_secretariat
 from app.database import get_db
-from app.models.courrier import Courrier, ConfidentialiteCourrier, EtatCourrier
+from app.models.courrier import Courrier, EtatCourrier
 from app.models.flux import FluxEtape
 from app.models.mouvement import Mouvement, ActionMouvement
 from app.models.poste import Poste
 from app.models.utilisateur import Utilisateur
-from app.schemas.courrier import CourrierCreate, CourrierOut, CourrierUpdate, TransmettreCourrierIn, ActionCourrierIn
-from app.services.courrier_service import creer_courrier, transmettre_courrier, get_courriers_poste
+from app.schemas.courrier import CourrierCreate, CourrierOut, CourrierUpdate, CourrierLiaisonOut, TransmettreCourrierIn, ActionCourrierIn
+from app.services.courrier_service import creer_courrier, transmettre_courrier, get_courriers_postes
 
 router = APIRouter(prefix="/courriers", tags=["courriers"])
+
+
+def _poste_autorise_courrier(courrier: Courrier, postes: list[Poste]) -> Poste:
+    for poste in postes:
+        if poste_peut_acceder_courrier(poste, courrier):
+            return poste
+    raise HTTPException(status_code=403, detail="Accès refusé à ce courrier")
 
 
 @router.post("", response_model=CourrierOut, status_code=status.HTTP_201_CREATED)
@@ -34,12 +41,12 @@ async def mes_corbeilles(
     type_action: str | None = None,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     """Retourne les courriers du POSTE de l'utilisateur connecté (couche 2 de sécurité)."""
-    if poste is None:
+    if not postes:
         return []
-    return await get_courriers_poste(db, poste, etat, type_action)
+    return await get_courriers_postes(db, postes, etat, type_action)
 
 
 @router.get("/{courrier_id}", response_model=CourrierOut)
@@ -47,7 +54,7 @@ async def obtenir(
     courrier_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     result = await db.execute(
         select(Courrier)
@@ -58,14 +65,50 @@ async def obtenir(
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
 
-    # Couche 2 : le courrier doit appartenir au poste de l'utilisateur
-    if poste is None or courrier.poste_destinataire_id != poste.id:
-        raise HTTPException(status_code=403, detail="Accès refusé à ce courrier")
-
-    if courrier.confidentialite == ConfidentialiteCourrier.confidentiel and not peut_voir_courrier_confidentiel(poste):
-        raise HTTPException(status_code=403, detail="Courrier confidentiel — accès refusé")
+    _poste_autorise_courrier(courrier, postes)
 
     return courrier
+
+
+@router.get("/{courrier_id}/liaisons", response_model=dict)
+async def liaisons(
+    courrier_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[Utilisateur, Depends(get_current_user)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
+):
+    """
+    Retourne le fil de correspondance : courrier parent (si existant) + réponses (enfants).
+    Accès restreint aux utilisateurs ayant un poste (couche 2 légère — résumés seulement).
+    """
+    result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
+    courrier = result.scalar_one_or_none()
+    if not courrier:
+        raise HTTPException(status_code=404, detail="Courrier introuvable")
+    _poste_autorise_courrier(courrier, postes)
+
+    parent = None
+    if courrier.courrier_parent_id:
+        r = await db.execute(select(Courrier).where(Courrier.id == courrier.courrier_parent_id))
+        parent_obj = r.scalar_one_or_none()
+        if parent_obj and any(poste_peut_acceder_courrier(p, parent_obj) for p in postes):
+            parent = CourrierLiaisonOut.model_validate(parent_obj)
+
+    r2 = await db.execute(
+        select(Courrier)
+        .where(Courrier.courrier_parent_id == courrier_id)
+        .order_by(Courrier.created_at)
+    )
+    reponses = [
+        CourrierLiaisonOut.model_validate(c)
+        for c in r2.scalars().all()
+        if any(poste_peut_acceder_courrier(p, c) for p in postes)
+    ]
+
+    return {
+        "parent": parent.model_dump() if parent else None,
+        "reponses": [r.model_dump() for r in reponses],
+    }
 
 
 @router.get("/{courrier_id}/historique")
@@ -73,15 +116,14 @@ async def historique_mouvements(
     courrier_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     """Trace complète des passages du courrier entre postes."""
     result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
     courrier = result.scalar_one_or_none()
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
-    if poste is None or courrier.poste_destinataire_id != poste.id:
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    _poste_autorise_courrier(courrier, postes)
 
     mvt_result = await db.execute(
         select(Mouvement)
@@ -109,14 +151,13 @@ async def modifier(
     data: CourrierUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
     courrier = result.scalar_one_or_none()
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
-    if poste is None or courrier.poste_destinataire_id != poste.id:
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    _poste_autorise_courrier(courrier, postes)
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(courrier, field, value)
@@ -131,7 +172,7 @@ async def action_parapheur(
     data: ActionCourrierIn,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     """
     Parapheur — enregistre une action (visa/signature/annotation/retour).
@@ -145,8 +186,7 @@ async def action_parapheur(
     courrier = result.scalar_one_or_none()
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
-    if poste is None or courrier.poste_destinataire_id != poste.id:
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    poste = _poste_autorise_courrier(courrier, postes)
 
     mvt = Mouvement(
         courrier_id=courrier.id,
@@ -203,15 +243,14 @@ async def archiver(
     courrier_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     """Archive un courrier traité — action irréversible."""
     result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
     courrier = result.scalar_one_or_none()
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
-    if poste is None or courrier.poste_destinataire_id != poste.id:
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    poste = _poste_autorise_courrier(courrier, postes)
     if courrier.etat != EtatCourrier.traite:
         raise HTTPException(status_code=400, detail="Seuls les courriers traités peuvent être archivés")
 
@@ -234,13 +273,12 @@ async def transmettre(
     data: TransmettreCourrierIn,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
     courrier = result.scalar_one_or_none()
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
-    if poste is None or courrier.poste_destinataire_id != poste.id:
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    _poste_autorise_courrier(courrier, postes)
 
     return await transmettre_courrier(db, courrier, data.poste_destination_id, current_user, data.commentaire)

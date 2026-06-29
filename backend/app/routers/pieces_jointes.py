@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.auth import get_current_user, get_poste_utilisateur
+from app.core.auth import get_current_user, get_postes_utilisateur, postes_peuvent_acceder_courrier
 from app.database import get_db
 from app.models.courrier import Courrier
 from app.models.piece_jointe import PieceJointe
@@ -37,13 +37,13 @@ MIME_AUTORISES = {
 async def _get_courrier_avec_acces(
     courrier_id: str,
     db: AsyncSession,
-    poste: Poste | None,
+    postes: list[Poste],
 ) -> Courrier:
     result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
     courrier = result.scalar_one_or_none()
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
-    if poste is None or courrier.poste_destinataire_id != poste.id:
+    if not postes_peuvent_acceder_courrier(postes, courrier):
         raise HTTPException(status_code=403, detail="Accès refusé")
     return courrier
 
@@ -53,9 +53,9 @@ async def lister(
     courrier_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
-    await _get_courrier_avec_acces(courrier_id, db, poste)
+    await _get_courrier_avec_acces(courrier_id, db, postes)
     result = await db.execute(
         select(PieceJointe)
         .where(PieceJointe.courrier_id == courrier_id)
@@ -74,9 +74,9 @@ async def uploader(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user),
-    poste: Poste | None = Depends(get_poste_utilisateur),
+    postes: list[Poste] = Depends(get_postes_utilisateur),
 ):
-    await _get_courrier_avec_acces(courrier_id, db, poste)
+    await _get_courrier_avec_acces(courrier_id, db, postes)
 
     contenu = await file.read()
     if len(contenu) > MAX_FILE_SIZE:
@@ -113,7 +113,7 @@ async def telecharger(
     pj_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     result = await db.execute(select(PieceJointe).where(PieceJointe.id == pj_id))
     pj = result.scalar_one_or_none()
@@ -121,7 +121,7 @@ async def telecharger(
         raise HTTPException(status_code=404, detail="Pièce jointe introuvable")
 
     # Vérifier l'accès via le courrier
-    await _get_courrier_avec_acces(pj.courrier_id, db, poste)
+    await _get_courrier_avec_acces(pj.courrier_id, db, postes)
 
     if not os.path.exists(pj.chemin_stockage):
         raise HTTPException(status_code=410, detail="Fichier manquant sur le serveur")
@@ -138,14 +138,14 @@ async def supprimer(
     pj_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     result = await db.execute(select(PieceJointe).where(PieceJointe.id == pj_id))
     pj = result.scalar_one_or_none()
     if not pj:
         raise HTTPException(status_code=404, detail="Pièce jointe introuvable")
 
-    await _get_courrier_avec_acces(pj.courrier_id, db, poste)
+    await _get_courrier_avec_acces(pj.courrier_id, db, postes)
 
     # Supprimer le fichier physique
     try:

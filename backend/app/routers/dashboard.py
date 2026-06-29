@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, get_poste_utilisateur
+from app.core.auth import courrier_access_condition, get_current_user, get_postes_utilisateur
 from app.database import get_db
 from app.models.courrier import Courrier, EtatCourrier
 from app.models.poste import Poste
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 async def stats(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
-    poste: Annotated[Poste | None, Depends(get_poste_utilisateur)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     """KPIs globaux (admin) ou filtrés sur le poste de l'utilisateur connecté."""
     now = datetime.now(timezone.utc)
@@ -26,8 +26,8 @@ async def stats(
 
     def scoped(q):
         """Filtre optionnel selon le rôle."""
-        if not is_admin and poste:
-            return q.where(Courrier.poste_destinataire_id == poste.id)
+        if not is_admin:
+            return q.where(courrier_access_condition(postes))
         return q
 
     en_attente = (await db.execute(scoped(select(func.count()).select_from(Courrier).where(Courrier.etat == EtatCourrier.en_attente)))).scalar() or 0

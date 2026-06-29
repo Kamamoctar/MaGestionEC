@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getCourrier, transmettreCourrier, actionParapheur, archiverCourrier, type ActionParapheur } from "../../api/courriers";
+import { getCourrier, transmettreCourrier, actionParapheur, archiverCourrier, getLiaisons, type ActionParapheur, type LiaisonsResponse } from "../../api/courriers";
 import { getPostes } from "../../api/postes";
 import { getHistoriqueMouvements, type Mouvement } from "../../api/mouvements";
 import {
@@ -46,6 +46,7 @@ export default function CourrierDetailPage() {
   const [mouvements, setMouvements] = useState<Mouvement[]>([]);
   const [postes, setPostes] = useState<Poste[]>([]);
   const [piecesJointes, setPiecesJointes] = useState<PieceJointe[]>([]);
+  const [liaisons, setLiaisons] = useState<LiaisonsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<PanelMode>(null);
   const [posteDestId, setPosteDestId] = useState("");
@@ -56,8 +57,8 @@ export default function CourrierDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getCourrier(id), getHistoriqueMouvements(id), getPostes(), getPiecesJointes(id)])
-      .then(([c, mvts, ps, pjs]) => { setCourrier(c); setMouvements(mvts); setPostes(ps); setPiecesJointes(pjs); })
+    Promise.all([getCourrier(id), getHistoriqueMouvements(id), getPostes(), getPiecesJointes(id), getLiaisons(id)])
+      .then(([c, mvts, ps, pjs, li]) => { setCourrier(c); setMouvements(mvts); setPostes(ps); setPiecesJointes(pjs); setLiaisons(li); })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -143,7 +144,13 @@ export default function CourrierDetailPage() {
         </div>
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-          <div><dt className="text-gray-400">Expéditeur</dt><dd className="font-medium">{courrier.expediteur}</dd></div>
+          <div>
+            <dt className="text-gray-400">Expéditeur</dt>
+            <dd className="font-medium">{courrier.expediteur}</dd>
+            {courrier.reference_expediteur && (
+              <dd className="text-xs text-gray-400 font-mono mt-0.5">Réf. : {courrier.reference_expediteur}</dd>
+            )}
+          </div>
           <div><dt className="text-gray-400">Type</dt><dd className="font-medium capitalize">{courrier.type.replace("_", " ")}</dd></div>
           <div><dt className="text-gray-400">Reçu le</dt><dd className="font-medium">{new Date(courrier.date_reception).toLocaleDateString("fr-FR")}</dd></div>
           {courrier.date_limite && (
@@ -200,6 +207,12 @@ export default function CourrierDetailPage() {
                   className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark"
                 >
                   Transmettre →
+                </button>
+                <button
+                  onClick={() => navigate(`/app/enregistrement?parent_id=${courrier.id}`)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  Répondre
                 </button>
                 {mouvements.some((m) => m.poste_source_id) && (
                   <button
@@ -295,6 +308,63 @@ export default function CourrierDetailPage() {
           >
             Archiver
           </button>
+        </div>
+      )}
+
+      {/* Fil de correspondance */}
+      {liaisons && (liaisons.parent || liaisons.reponses.length > 0) && (
+        <div className="bg-white rounded-xl border p-6 mb-4">
+          <h2 className="font-medium text-gray-700 mb-4">Fil de correspondance</h2>
+          <div className="space-y-2">
+            {liaisons.parent && (
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-100">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-medium shrink-0 mt-0.5">
+                  ↑ Parent
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-mono text-gray-400">{liaisons.parent.reference}</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">{liaisons.parent.objet}</p>
+                  <p className="text-xs text-gray-500">{liaisons.parent.expediteur} · {new Date(liaisons.parent.date_reception).toLocaleDateString("fr-FR")}</p>
+                </div>
+                <button
+                  onClick={() => navigate(`/app/courriers/${liaisons.parent!.id}`)}
+                  className="text-xs px-2 py-1 border rounded text-primary hover:bg-blue-50 shrink-0"
+                >
+                  Voir
+                </button>
+              </div>
+            )}
+
+            {/* Courrier courant (repère visuel) */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium shrink-0">
+                → Ce courrier
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono text-gray-400">{courrier.reference}</p>
+                <p className="text-sm font-medium text-gray-800 truncate">{courrier.objet}</p>
+              </div>
+            </div>
+
+            {liaisons.reponses.map((r) => (
+              <div key={r.id} className="flex items-start gap-3 p-3 rounded-lg bg-green-50 border border-green-100">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-600 font-medium shrink-0 mt-0.5">
+                  ↓ Réponse
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-mono text-gray-400">{r.reference}</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">{r.objet}</p>
+                  <p className="text-xs text-gray-500">{r.expediteur} · {new Date(r.date_reception).toLocaleDateString("fr-FR")}</p>
+                </div>
+                <button
+                  onClick={() => navigate(`/app/courriers/${r.id}`)}
+                  className="text-xs px-2 py-1 border rounded text-primary hover:bg-blue-50 shrink-0"
+                >
+                  Voir
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

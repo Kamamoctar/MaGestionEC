@@ -50,6 +50,10 @@ class Courrier(Base):
     date_limite: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     etat: Mapped[EtatCourrier] = mapped_column(SAEnum(EtatCourrier), default=EtatCourrier.en_attente)
 
+    reference_expediteur: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    courrier_parent_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("courrier.id", ondelete="SET NULL"), nullable=True)
+    dossier_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("dossier.id", ondelete="SET NULL"), nullable=True)
+
     flux_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("flux.id"), nullable=True)
     etape_courante_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("flux_etape.id"), nullable=True)
     created_by_id: Mapped[str] = mapped_column(String(36), ForeignKey("utilisateur.id"))
@@ -69,3 +73,7 @@ class Courrier(Base):
     created_by: Mapped["Utilisateur"] = relationship("Utilisateur")
     pieces_jointes: Mapped[list["PieceJointe"]] = relationship("PieceJointe", back_populates="courrier", cascade="all, delete-orphan")
     mouvements: Mapped[list["Mouvement"]] = relationship("Mouvement", back_populates="courrier", order_by="Mouvement.created_at")
+
+    parent: Mapped["Courrier | None"] = relationship("Courrier", back_populates="reponses", remote_side="Courrier.id", foreign_keys=[courrier_parent_id])
+    reponses: Mapped[list["Courrier"]] = relationship("Courrier", back_populates="parent", foreign_keys=[courrier_parent_id])
+    dossier: Mapped["Dossier | None"] = relationship("Dossier", back_populates="courriers")

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import apiClient from "../../api/client";
-import { getPostes, creerPoste, affecterOccupant, affecterInterimaire, affecterDelegation } from "../../api/postes";
+import { getPostes, creerPoste, affecterOccupant, libererOccupant, affecterInterimaire, affecterDelegation } from "../../api/postes";
 import type { Poste, Utilisateur } from "../../types";
 
 type PanelMode = "affecter" | "interimaire" | "delegation" | null;
@@ -77,7 +77,7 @@ export default function PostesPage() {
 
   async function handleLiberer(posteId: string) {
     if (!confirm("Libérer ce poste (retirer l'occupant titulaire) ?")) return;
-    const updated = await affecterOccupant(posteId, "");
+    const updated = await libererOccupant(posteId);
     setPostes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
 

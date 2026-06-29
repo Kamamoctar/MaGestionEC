@@ -3,13 +3,15 @@ Tests du principe fondamental : le courrier est rattaché au POSTE.
 Changer d'occupant ne touche pas aux courriers — le nouvel occupant les hérite automatiquement.
 """
 import pytest
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.utilisateur import RoleFonctionnel
 from app.models.poste import Poste, NiveauAcces
+from app.models.courrier import Courrier, TypeCourrier, EtatCourrier
 from app.models.poste_affectation import TypeAffectation
-from app.services.poste_service import changer_occupant, affecter_interimaire, get_historique_affectations
-from tests.conftest import _create_user
+from app.services.poste_service import changer_occupant, affecter_interimaire, affecter_delegation, get_historique_affectations
+from tests.conftest import _create_user, _get_token
 
 
 @pytest.mark.asyncio
@@ -88,3 +90,39 @@ async def test_liberer_poste(db: AsyncSession):
 
     poste = await changer_occupant(db, poste, None)
     assert poste.occupant_user_id is None
+
+
+@pytest.mark.asyncio
+async def test_delegation_donne_acces_aux_corbeilles(db: AsyncSession, client: AsyncClient):
+    """Un délégataire actif voit les courriers du poste sans devenir occupant titulaire."""
+    titulaire = await _create_user(db, "titulaire_deleg@test.com", RoleFonctionnel.agent)
+    delegataire = await _create_user(db, "delegataire@test.com", RoleFonctionnel.agent)
+
+    poste = Poste(intitule="Poste Délégué", occupant_user_id=titulaire.id)
+    db.add(poste)
+    await db.commit()
+    await db.refresh(poste)
+
+    await affecter_delegation(db, poste, delegataire.id)
+
+    courrier = Courrier(
+        reference="DELEG-TEST-001",
+        objet="Courrier délégué",
+        expediteur="Cabinet",
+        poste_destinataire_id=poste.id,
+        type=TypeCourrier.arrivee,
+        etat=EtatCourrier.en_attente,
+        created_by_id=titulaire.id,
+    )
+    db.add(courrier)
+    await db.commit()
+
+    token = await _get_token(client, delegataire.email)
+    r = await client.get(
+        "/courriers/mes-corbeilles",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+    refs = [c["reference"] for c in r.json()]
+    assert courrier.reference in refs
+    assert poste.occupant_user_id == titulaire.id

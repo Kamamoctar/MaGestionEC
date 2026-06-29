@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, get_poste_utilisateur
+from app.core.auth import courrier_access_condition, get_current_user, get_postes_utilisateur
 from app.database import get_db
-from app.models.courrier import Courrier, TypeCourrier, EtatCourrier, PrioriteCourrier, ConfidentialiteCourrier
-from app.models.poste import Poste, NiveauAcces
-from app.models.utilisateur import Utilisateur, RoleFonctionnel
+from app.models.courrier import Courrier, TypeCourrier, EtatCourrier, PrioriteCourrier
+from app.models.poste import Poste
+from app.models.utilisateur import Utilisateur
 from app.schemas.courrier import CourrierOut
 
 router = APIRouter(prefix="/recherche", tags=["recherche"])
@@ -26,24 +26,17 @@ async def rechercher(
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user),
-    poste: Poste | None = Depends(get_poste_utilisateur),
+    postes: list[Poste] = Depends(get_postes_utilisateur),
 ):
     """
     Recherche full-text + filtres sur les courriers.
-    Admin : tous les courriers.
-    Autres : uniquement les courriers du poste courant.
+    Retourne uniquement les courriers des postes accessibles par l'utilisateur.
     """
     stmt = select(Courrier)
 
-    # Périmètre selon le rôle
-    is_admin = current_user.role_fonctionnel == RoleFonctionnel.admin
-    if not is_admin:
-        if poste is None:
-            return []
-        stmt = stmt.where(Courrier.poste_destinataire_id == poste.id)
-        # Couche 2 confidentialité : masquer les courriers confidentiels si niveau insuffisant
-        if poste.niveau_acces != NiveauAcces.confidentiel:
-            stmt = stmt.where(Courrier.confidentialite != ConfidentialiteCourrier.confidentiel)
+    if not postes:
+        return []
+    stmt = stmt.where(courrier_access_condition(postes))
 
     # Full-text ILIKE sur objet, expediteur, reference
     if q:

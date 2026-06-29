@@ -1,14 +1,17 @@
 import uuid
 from datetime import datetime, timezone
+from collections.abc import Iterable
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.auth import courrier_access_condition
 from app.models.compteur import CompteurReference
-from app.models.courrier import Courrier, EtatCourrier, ConfidentialiteCourrier
+from app.models.courrier import Courrier, EtatCourrier
 from app.models.flux import FluxEtape
 from app.models.mouvement import Mouvement, ActionMouvement
-from app.models.poste import Poste, NiveauAcces
+from app.models.poste import Poste
 from app.models.utilisateur import Utilisateur
 
 
@@ -109,23 +112,34 @@ async def get_courriers_poste(
     etat: str | None = None,
     type_action: str | None = None,
 ) -> list[Courrier]:
-    """
-    Couche 2 : retourne uniquement les courriers du POSTE.
-    - Les courriers confidentiels ne sont visibles que si le poste a niveau_acces=confidentiel.
-    - type_action filtre sur type_action_courante (ex : 'information' pour la corbeille dédiée).
-    """
-    conditions = [Courrier.poste_destinataire_id == poste.id]
+    return await get_courriers_postes(db, [poste], etat, type_action)
 
-    if poste.niveau_acces != NiveauAcces.confidentiel:
-        conditions.append(Courrier.confidentialite != ConfidentialiteCourrier.confidentiel)
+
+async def get_courriers_postes(
+    db: AsyncSession,
+    postes: Iterable[Poste],
+    etat: str | None = None,
+    type_action: str | None = None,
+) -> list[Courrier]:
+    """
+    Couche 2 : retourne uniquement les courriers des postes accessibles.
+    - Les courriers confidentiels ne sont visibles que par un poste de niveau confidentiel.
+    - type_action filtre sur FluxEtape.type_action (ex : 'information' pour la corbeille dédiée).
+    """
+    stmt = (
+        select(Courrier)
+        .options(selectinload(Courrier.etape_courante))
+        .where(courrier_access_condition(postes))
+    )
 
     if etat:
-        conditions.append(Courrier.etat == etat)
+        stmt = stmt.where(Courrier.etat == etat)
 
     if type_action:
-        conditions.append(Courrier.type_action_courante == type_action)
+        stmt = (
+            stmt.join(FluxEtape, Courrier.etape_courante_id == FluxEtape.id)
+            .where(FluxEtape.type_action == type_action)
+        )
 
-    result = await db.execute(
-        select(Courrier).where(and_(*conditions)).order_by(Courrier.created_at.desc())
-    )
+    result = await db.execute(stmt.order_by(Courrier.created_at.desc()))
     return list(result.scalars().all())

@@ -21,6 +21,11 @@ export async function affecterOccupant(posteId: string, utilisateur_id: string, 
   return data;
 }
 
+export async function libererOccupant(posteId: string): Promise<Poste> {
+  const { data } = await apiClient.delete<Poste>(`/postes/${posteId}/occupant`);
+  return data;
+}
+
 export async function affecterInterimaire(posteId: string, utilisateur_id: string): Promise<Poste> {
   const { data } = await apiClient.post<Poste>(`/postes/${posteId}/interimaire`, { utilisateur_id });
   return data;

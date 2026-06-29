@@ -291,3 +291,66 @@ async def test_historique_trace_toutes_actions(db: AsyncSession, client: AsyncCl
     assert "creation" in actions
     assert "visa" in actions
     assert "signature" in actions
+
+
+@pytest.mark.asyncio
+async def test_corbeille_pour_information_filtre_type_action(db: AsyncSession, client: AsyncClient):
+    """La corbeille Pour information filtre sur FluxEtape.type_action."""
+    poste, user = await _creer_poste_avec_user(db, "Info Poste", "info_user@test.com")
+    token = await _get_token(client, "info_user@test.com")
+
+    flux = Flux(nom="Circuit information")
+    db.add(flux)
+    await db.flush()
+    etape_info = FluxEtape(
+        flux_id=flux.id,
+        poste_id=poste.id,
+        type_action="information",
+        ordre=1,
+        is_terminal=True,
+    )
+    etape_visa = FluxEtape(
+        flux_id=flux.id,
+        poste_id=poste.id,
+        type_action="visa",
+        ordre=2,
+        is_terminal=False,
+    )
+    db.add_all([etape_info, etape_visa])
+    await db.flush()
+
+    c_info = Courrier(
+        reference="INFO-TEST-001",
+        objet="Pour information",
+        expediteur="DG",
+        poste_destinataire_id=poste.id,
+        type=TypeCourrier.arrivee,
+        etat=EtatCourrier.en_cours,
+        flux_id=flux.id,
+        etape_courante_id=etape_info.id,
+        created_by_id=user.id,
+    )
+    c_visa = Courrier(
+        reference="VISA-TEST-001",
+        objet="Pour visa",
+        expediteur="DG",
+        poste_destinataire_id=poste.id,
+        type=TypeCourrier.arrivee,
+        etat=EtatCourrier.en_cours,
+        flux_id=flux.id,
+        etape_courante_id=etape_visa.id,
+        created_by_id=user.id,
+    )
+    db.add_all([c_info, c_visa])
+    await db.commit()
+
+    r = await client.get(
+        "/courriers/mes-corbeilles",
+        params={"type_action": "information"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200, r.text
+    refs = [c["reference"] for c in r.json()]
+    assert c_info.reference in refs
+    assert c_visa.reference not in refs
+    assert r.json()[0]["type_action_courante"] == "information"

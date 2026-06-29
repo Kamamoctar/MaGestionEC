@@ -24,6 +24,7 @@ export interface Courrier {
   reference: string;
   objet: string;
   expediteur: string;
+  reference_expediteur: string | null;
   poste_destinataire_id: string;
   type: "arrivee" | "depart" | "interne";
   priorite: "normal" | "urgent" | "tres_urgent";
@@ -34,9 +35,31 @@ export interface Courrier {
   flux_id: string | null;
   etape_courante_id: string | null;
   type_action_courante: "distribution" | "visa" | "signature" | "information" | null;
+  courrier_parent_id: string | null;
+  dossier_id: string | null;
   created_by_id: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface CourrierLiaison {
+  id: string;
+  reference: string;
+  objet: string;
+  type: "arrivee" | "depart" | "interne";
+  etat: "en_attente" | "en_cours" | "traite" | "archive";
+  priorite: "normal" | "urgent" | "tres_urgent";
+  date_reception: string;
+  expediteur: string;
+}
+
+export interface Dossier {
+  id: string;
+  titre: string;
+  description: string | null;
+  created_by_id: string;
+  created_at: string;
+  nb_courriers: number;
 }
 
 export interface Direction {

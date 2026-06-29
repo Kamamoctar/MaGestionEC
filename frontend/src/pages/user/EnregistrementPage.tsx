@@ -1,18 +1,23 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { creerCourrier } from "../../api/courriers";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { creerCourrier, getCourrier } from "../../api/courriers";
 import { getPostes } from "../../api/postes";
 import { getFlux } from "../../api/flux";
-import type { Poste, Flux } from "../../types";
+import type { Courrier, Poste, Flux } from "../../types";
 
 export default function EnregistrementPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const parentId = searchParams.get("parent_id");
+
   const [postes, setPostes] = useState<Poste[]>([]);
   const [circuits, setCircuits] = useState<Flux[]>([]);
+  const [parentCourrier, setParentCourrier] = useState<Courrier | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     objet: "",
     expediteur: "",
+    reference_expediteur: "",
     poste_destinataire_id: "",
     type: "arrivee" as "arrivee" | "depart" | "interne",
     priorite: "normal" as "normal" | "urgent" | "tres_urgent",
@@ -27,6 +32,19 @@ export default function EnregistrementPage() {
       setCircuits(fx);
     });
   }, []);
+
+  // Si on répond à un courrier parent, précharge l'objet avec "RE: ..."
+  useEffect(() => {
+    if (!parentId) return;
+    getCourrier(parentId).then((c) => {
+      setParentCourrier(c);
+      setForm((prev) => ({
+        ...prev,
+        objet: `RE: ${c.objet}`,
+        type: "depart",
+      }));
+    }).catch(() => {});
+  }, [parentId]);
 
   function set(field: string, value: string) {
     setForm((prev) => {
@@ -47,11 +65,13 @@ export default function EnregistrementPage() {
       const payload: Record<string, unknown> = {
         objet: form.objet,
         expediteur: form.expediteur,
+        reference_expediteur: form.reference_expediteur || null,
         type: form.type,
         priorite: form.priorite,
         confidentialite: form.confidentialite,
         date_limite: form.date_limite ? new Date(form.date_limite).toISOString() : null,
       };
+      if (parentId) payload.courrier_parent_id = parentId;
       if (form.flux_id) {
         payload.flux_id = form.flux_id;
         // poste_destinataire_id sera déduit de la première étape côté backend
@@ -71,7 +91,16 @@ export default function EnregistrementPage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-xl font-semibold text-gray-800 mb-6">Enregistrement express</h1>
+      <h1 className="text-xl font-semibold text-gray-800 mb-6">
+        {parentCourrier ? "Répondre au courrier" : "Enregistrement express"}
+      </h1>
+
+      {parentCourrier && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <span className="font-mono text-xs text-blue-500 block mb-0.5">{parentCourrier.reference}</span>
+          En réponse à : <strong>{parentCourrier.objet}</strong>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-5">
         <div className="grid grid-cols-2 gap-4">
@@ -85,12 +114,25 @@ export default function EnregistrementPage() {
             />
           </div>
 
-          <div className="col-span-2">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Expéditeur *</label>
             <input
               value={form.expediteur}
               onChange={(e) => set("expediteur", e.target.value)}
               required
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Réf. expéditeur
+              <span className="ml-1 text-xs text-gray-400 font-normal">(optionnel)</span>
+            </label>
+            <input
+              value={form.reference_expediteur}
+              onChange={(e) => set("reference_expediteur", e.target.value)}
+              placeholder="N°…/26/MESPTN/CAB"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>

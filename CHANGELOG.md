@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.2.1] - 2026-06-29
+
+### Fixed — Sécurité et règles Poste
+
+- Centralisation du contrôle d'accès courrier : un courrier est accessible uniquement via un poste autorisé, avec respect du niveau de confidentialité.
+- Application de ce contrôle aux détails courrier, historique, liaisons, actions parapheur, transmission, archivage et pièces jointes.
+- Prise en compte des délégations et intérims actifs dans les postes accessibles par un utilisateur.
+- Correction de la corbeille "Pour information" : filtrage SQL sur `FluxEtape.type_action` et chargement de l'étape courante.
+- Correction du bouton frontend "Libérer" : utilisation de `DELETE /postes/{poste_id}/occupant` au lieu d'une affectation vide.
+- La recherche de courriers respecte désormais les postes accessibles, sans accès global basé uniquement sur le rôle admin.
+- Les notifications SSE respectent aussi les postes accessibles et la confidentialité.
+
+### Tests
+
+- Ajout de tests backend sur l'accès direct aux courriers confidentiels, les pièces jointes confidentielles, la délégation de poste et la corbeille "Pour information".
+
 ## [0.2.0] - 2026-06-25
 
 ### Added — Infrastructure

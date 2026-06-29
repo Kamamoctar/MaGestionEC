@@ -16,6 +16,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import courrier_access_condition, get_postes_accessibles_by_user_id
 from app.core.security import decode_token as decode_access_token
 from app.database import AsyncSessionLocal
 from app.models.courrier import Courrier, EtatCourrier
@@ -28,8 +29,8 @@ POLL_INTERVAL = 6  # secondes entre chaque vérification DB
 KEEPALIVE_INTERVAL = 20  # secondes entre les pings keepalive
 
 
-async def _get_user_and_poste(token: str) -> tuple[Utilisateur, Poste | None] | None:
-    """Résout le token JWT en (utilisateur, poste). Retourne None si invalide."""
+async def _get_user_and_postes(token: str) -> tuple[Utilisateur, list[Poste]] | None:
+    """Résout le token JWT en (utilisateur, postes accessibles). Retourne None si invalide."""
     try:
         payload = decode_access_token(token)
         user_id: str | None = payload.get("sub")
@@ -44,11 +45,8 @@ async def _get_user_and_poste(token: str) -> tuple[Utilisateur, Poste | None] | 
         if not user:
             return None
 
-        poste_res = await db.execute(
-            select(Poste).where(Poste.occupant_user_id == user_id, Poste.is_active == True)
-        )
-        poste = poste_res.scalar_one_or_none()
-        return user, poste
+        postes = await get_postes_accessibles_by_user_id(db, user_id)
+        return user, postes
 
 
 @router.get("/stream")
@@ -57,12 +55,12 @@ async def stream(token: Annotated[str, Query(description="JWT access token")]):
     Flux SSE — envoie un événement quand un nouveau courrier arrive sur le poste.
     Format : data: {"type": "nouveau_courrier", "reference": "ARR-2026-0001", "objet": "..."}
     """
-    result = await _get_user_and_poste(token)
+    result = await _get_user_and_postes(token)
     if result is None:
         raise HTTPException(status_code=401, detail="Token invalide")
 
-    _, poste = result
-    if poste is None:
+    _, postes = result
+    if not postes:
         # Pas de poste → flux vide mais valide (keepalive uniquement)
         pass
 
@@ -72,11 +70,11 @@ async def stream(token: Annotated[str, Query(description="JWT access token")]):
         known_ids: set[str] = set()
 
         # Initialiser les IDs déjà présents pour ne pas notifier l'historique
-        if poste:
+        if postes:
             async with AsyncSessionLocal() as db:
                 res = await db.execute(
                     select(Courrier.id)
-                    .where(Courrier.poste_destinataire_id == poste.id)
+                    .where(courrier_access_condition(postes))
                 )
                 known_ids = {row[0] for row in res.all()}
 
@@ -90,12 +88,12 @@ async def stream(token: Annotated[str, Query(description="JWT access token")]):
                     last_keepalive = now
 
                 # Vérification des nouveaux courriers
-                if poste and (now - last_check).total_seconds() >= POLL_INTERVAL:
+                if postes and (now - last_check).total_seconds() >= POLL_INTERVAL:
                     async with AsyncSessionLocal() as db:
                         res = await db.execute(
                             select(Courrier)
                             .where(
-                                Courrier.poste_destinataire_id == poste.id,
+                                courrier_access_condition(postes),
                                 Courrier.etat.in_([EtatCourrier.en_attente, EtatCourrier.en_cours]),
                                 Courrier.created_at >= last_check - timedelta(seconds=POLL_INTERVAL + 2),
                             )

@@ -1,9 +1,9 @@
 # Project Manifest
 
 **Project**: GEC – Gestion Électronique des Courriers (PWA)
-**Version**: 0.2.0
+**Version**: 0.2.1
 **Created**: 2026-06-25
-**Last Updated**: 2026-06-25
+**Last Updated**: 2026-06-29
 
 ## Description
 Application web autonome (PWA installable) de Gestion Électronique des Courriers.
