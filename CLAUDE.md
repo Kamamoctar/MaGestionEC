@@ -56,4 +56,5 @@
 - PWA : maintenir manifest + service worker ; le shell et les listes consultées doivent rester accessibles hors-ligne.
 - Pièces jointes volumineuses stockées HORS base (S3/MinIO ou disque) — seule la référence va en base.
 - UX : épurée, zéro jargon, zéro formation pour le top management.
+- Toujours mettre à jour la page frontend `Aide & documentation` (`frontend/src/pages/AidePage.tsx`) lorsqu'une fonctionnalité visible, une règle métier ou un workflow utilisateur/admin évolue.
 - Documenter en français les modèles et la logique non triviale.

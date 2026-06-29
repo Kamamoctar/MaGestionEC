@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import apiClient from "../../api/client";
-import { getPostes, creerPoste, affecterOccupant, libererOccupant, affecterInterimaire, affecterDelegation } from "../../api/postes";
+import {
+  getPostes,
+  creerPoste,
+  affecterOccupant,
+  libererOccupant,
+  desactiverPoste,
+  reactiverPoste,
+  supprimerPoste,
+  affecterInterimaire,
+  affecterDelegation,
+} from "../../api/postes";
 import type { Poste, Utilisateur } from "../../types";
 
 type PanelMode = "affecter" | "interimaire" | "delegation" | null;
@@ -21,7 +31,7 @@ export default function PostesPage() {
 
   useEffect(() => {
     Promise.all([
-      getPostes(),
+      getPostes(true),
       apiClient.get<Utilisateur[]>("/utilisateurs").then((r) => r.data),
     ]).then(([ps, us]) => {
       setPostes(ps);
@@ -81,6 +91,38 @@ export default function PostesPage() {
     setPostes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
 
+  async function handleDesactiver(poste: Poste) {
+    if (!confirm(`Désactiver le poste « ${poste.intitule} » ?`)) return;
+    try {
+      const updated = await desactiverPoste(poste.id);
+      setPostes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      closePanel();
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? "Impossible de désactiver ce poste.");
+    }
+  }
+
+  async function handleReactiver(poste: Poste) {
+    const updated = await reactiverPoste(poste.id);
+    setPostes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  }
+
+  async function handleSupprimer(poste: Poste) {
+    if (!confirm(`Supprimer définitivement le poste « ${poste.intitule} » ?`)) return;
+    try {
+      await supprimerPoste(poste.id);
+      setPostes((prev) => prev.filter((p) => p.id !== poste.id));
+      closePanel();
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      if (detail?.blocages) {
+        alert(`${detail.message}\n\nRéférences trouvées :\n- ${detail.blocages.join("\n- ")}`);
+      } else {
+        alert(detail ?? "Suppression impossible.");
+      }
+    }
+  }
+
   if (loading) return <div className="text-gray-400">Chargement…</div>;
 
   return (
@@ -123,7 +165,7 @@ export default function PostesPage() {
           <tbody className="divide-y">
             {postes.map((p) => (
               <>
-                <tr key={p.id} className="hover:bg-gray-50">
+                <tr key={p.id} className={`hover:bg-gray-50 ${!p.is_active ? "bg-gray-50 text-gray-500" : ""}`}>
                   <td className="px-4 py-3 font-medium">{p.intitule}</td>
                   <td className="px-4 py-3">
                     {p.occupant_user_id ? (
@@ -145,25 +187,31 @@ export default function PostesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`w-2 h-2 rounded-full inline-block ${p.is_active ? "bg-green-500" : "bg-gray-300"}`} />
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${p.is_active ? "text-green-600" : "text-gray-400"}`}>
+                      <span className={`w-2 h-2 rounded-full inline-block ${p.is_active ? "bg-green-500" : "bg-gray-300"}`} />
+                      {p.is_active ? "Actif" : "Désactivé"}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 flex-wrap">
                       <button
                         onClick={() => openPanel(p.id, "affecter", p.occupant_user_id)}
-                        className="text-xs px-2 py-1 border rounded-md text-primary hover:bg-blue-50"
+                        disabled={!p.is_active}
+                        className="text-xs px-2 py-1 border rounded-md text-primary hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {p.occupant_user_id ? "Changer" : "Affecter"}
                       </button>
                       <button
                         onClick={() => openPanel(p.id, "interimaire")}
-                        className="text-xs px-2 py-1 border rounded-md text-purple-600 hover:bg-purple-50"
+                        disabled={!p.is_active}
+                        className="text-xs px-2 py-1 border rounded-md text-purple-600 hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Intérim
                       </button>
                       <button
                         onClick={() => openPanel(p.id, "delegation")}
-                        className="text-xs px-2 py-1 border rounded-md text-amber-600 hover:bg-amber-50"
+                        disabled={!p.is_active}
+                        className="text-xs px-2 py-1 border rounded-md text-amber-600 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Déléguer
                       </button>
@@ -175,6 +223,27 @@ export default function PostesPage() {
                           Libérer
                         </button>
                       )}
+                      {p.is_active ? (
+                        <button
+                          onClick={() => handleDesactiver(p)}
+                          className="text-xs px-2 py-1 border rounded-md text-gray-600 hover:bg-gray-50"
+                        >
+                          Désactiver
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleReactiver(p)}
+                          className="text-xs px-2 py-1 border rounded-md text-green-600 hover:bg-green-50"
+                        >
+                          Réactiver
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleSupprimer(p)}
+                        className="text-xs px-2 py-1 border rounded-md text-red-500 hover:bg-red-50"
+                      >
+                        Supprimer
+                      </button>
                     </div>
                   </td>
                 </tr>

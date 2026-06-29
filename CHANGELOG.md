@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.2.2] - 2026-06-29
+
+### Added — Cycle de vie des postes
+
+- Ajout de la désactivation fonctionnelle d'un poste : le poste sort des listes usuelles, son occupant est retiré et ses affectations actives sont clôturées.
+- Blocage de la désactivation si le poste porte encore des courriers actifs (`en_attente` ou `en_cours`).
+- Ajout de la réactivation d'un poste désactivé.
+- Ajout d'une suppression définitive réservée aux postes vierges ; elle est refusée dès qu'une trace métier existe (courrier, affectation, étape de circuit, mouvement ou occupant actif).
+- L'écran Admin des postes affiche les postes désactivés et propose les actions adaptées.
+- Mise à jour de la page `Aide & documentation` avec le cycle de vie des postes et ajout d'une règle projet imposant sa mise à jour lors des évolutions visibles.
+
+### Tests
+
+- Ajout de tests backend sur la désactivation, la réactivation, la suppression vierge et le refus de suppression d'un poste historisé.
+
 ## [0.2.1] - 2026-06-29
 
 ### Fixed — Sécurité et règles Poste

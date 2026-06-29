@@ -1,8 +1,10 @@
 import apiClient from "./client";
 import type { Poste } from "../types";
 
-export async function getPostes(): Promise<Poste[]> {
-  const { data } = await apiClient.get<Poste[]>("/postes");
+export async function getPostes(includeInactive = false): Promise<Poste[]> {
+  const { data } = await apiClient.get<Poste[]>("/postes", {
+    params: includeInactive ? { include_inactive: true } : undefined,
+  });
   return data;
 }
 
@@ -24,6 +26,20 @@ export async function affecterOccupant(posteId: string, utilisateur_id: string, 
 export async function libererOccupant(posteId: string): Promise<Poste> {
   const { data } = await apiClient.delete<Poste>(`/postes/${posteId}/occupant`);
   return data;
+}
+
+export async function desactiverPoste(posteId: string): Promise<Poste> {
+  const { data } = await apiClient.post<Poste>(`/postes/${posteId}/desactiver`);
+  return data;
+}
+
+export async function reactiverPoste(posteId: string): Promise<Poste> {
+  const { data } = await apiClient.post<Poste>(`/postes/${posteId}/reactiver`);
+  return data;
+}
+
+export async function supprimerPoste(posteId: string): Promise<void> {
+  await apiClient.delete(`/postes/${posteId}`);
 }
 
 export async function affecterInterimaire(posteId: string, utilisateur_id: string): Promise<Poste> {

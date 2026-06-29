@@ -12,7 +12,11 @@ const ADMIN_SECTIONS: Section[] = [
           <li><strong>Créer un poste</strong> : cliquez « + Nouveau poste », saisissez l'intitulé.</li>
           <li><strong>Affecter un titulaire</strong> : bouton « Affecter / Changer » → sélectionnez un utilisateur actif. Tous les courriers en cours du poste lui sont instantanément accessibles.</li>
           <li><strong>Intérim</strong> : bouton « Intérim » (violet) → l'intérimaire hérite temporairement des courriers et droits du poste sans modifier l'affectation titulaire.</li>
+          <li><strong>Délégation</strong> : bouton « Déléguer » → le titulaire reste en place, mais la personne désignée accède temporairement aux courriers du poste.</li>
           <li><strong>Libérer un poste</strong> : bouton « Libérer » → le poste devient vacant. Les courriers restent attachés au poste.</li>
+          <li><strong>Désactiver un poste</strong> : à utiliser quand la fonction n'existe plus. Le poste sort des listes usuelles, son occupant est retiré et l'historique reste conservé.</li>
+          <li><strong>Réactiver un poste</strong> : rend à nouveau disponible un poste désactivé.</li>
+          <li><strong>Supprimer un poste</strong> : possible uniquement pour un poste créé par erreur et jamais utilisé. Si des courriers, mouvements, affectations ou circuits le référencent, utilisez « Désactiver ».</li>
         </ul>
       </div>
     ),
@@ -226,7 +230,7 @@ export default function AidePage() {
       </div>
 
       <p className="mt-8 text-xs text-gray-400 text-center">
-        GEC v0.1.0 — Pour signaler un problème, contactez votre administrateur système.
+        GEC v0.2.2 — Pour signaler un problème, contactez votre administrateur système.
       </p>
     </div>
   );

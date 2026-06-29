@@ -8,17 +8,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import require_admin, get_current_user
 from app.database import get_db
 from app.models.poste import Poste
-from app.models.utilisateur import Utilisateur
-from app.models.poste_affectation import PosteAffectation
+from app.models.utilisateur import Utilisateur, RoleFonctionnel
 from app.schemas.poste import PosteCreate, PosteOut, PosteDetailOut, PosteUpdate, AffectationOccupantIn, InterimaireIn, DelegationIn
-from app.services.poste_service import changer_occupant, affecter_interimaire, affecter_delegation, get_historique_affectations
+from app.services.poste_service import (
+    changer_occupant,
+    affecter_interimaire,
+    affecter_delegation,
+    desactiver_poste,
+    reactiver_poste,
+    get_blocages_suppression_poste,
+    get_historique_affectations,
+)
 
 router = APIRouter(prefix="/postes", tags=["postes"])
 
 
-@router.get("", response_model=list[PosteOut], dependencies=[Depends(get_current_user)])
-async def lister(db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(Poste).where(Poste.is_active == True).order_by(Poste.intitule))
+@router.get("", response_model=list[PosteOut])
+async def lister(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[Utilisateur, Depends(get_current_user)],
+    include_inactive: bool = False,
+):
+    if include_inactive and current_user.role_fonctionnel != RoleFonctionnel.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    stmt = select(Poste).order_by(Poste.is_active.desc(), Poste.intitule)
+    if not include_inactive:
+        stmt = stmt.where(Poste.is_active == True)
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -48,8 +65,19 @@ async def modifier(poste_id: str, data: PosteUpdate, db: Annotated[AsyncSession,
     poste = result.scalar_one_or_none()
     if not poste:
         raise HTTPException(status_code=404, detail="Poste introuvable")
-    for field, value in data.model_dump(exclude_none=True).items():
+    updates = data.model_dump(exclude_none=True)
+    is_active = updates.pop("is_active", None)
+    for field, value in updates.items():
         setattr(poste, field, value)
+
+    if is_active is False and poste.is_active:
+        try:
+            return await desactiver_poste(db, poste)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    if is_active is True and not poste.is_active:
+        return await reactiver_poste(db, poste)
+
     await db.commit()
     await db.refresh(poste)
     return poste
@@ -78,6 +106,27 @@ async def liberer_occupant(poste_id: str, db: Annotated[AsyncSession, Depends(ge
     if not poste:
         raise HTTPException(status_code=404, detail="Poste introuvable")
     return await changer_occupant(db, poste, None)
+
+
+@router.post("/{poste_id}/desactiver", response_model=PosteOut, dependencies=[Depends(require_admin)])
+async def desactiver(poste_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(Poste).where(Poste.id == poste_id))
+    poste = result.scalar_one_or_none()
+    if not poste:
+        raise HTTPException(status_code=404, detail="Poste introuvable")
+    try:
+        return await desactiver_poste(db, poste)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.post("/{poste_id}/reactiver", response_model=PosteOut, dependencies=[Depends(require_admin)])
+async def reactiver(poste_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(Poste).where(Poste.id == poste_id))
+    poste = result.scalar_one_or_none()
+    if not poste:
+        raise HTTPException(status_code=404, detail="Poste introuvable")
+    return await reactiver_poste(db, poste)
 
 
 @router.post("/{poste_id}/interimaire", response_model=PosteOut, dependencies=[Depends(require_admin)])
@@ -112,3 +161,28 @@ async def historique(poste_id: str, db: Annotated[AsyncSession, Depends(get_db)]
         }
         for a in affectations
     ]
+
+
+@router.delete("/{poste_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)])
+async def supprimer(poste_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """
+    Suppression physique réservée aux postes créés par erreur.
+    Refusée dès qu'une trace métier référence le poste.
+    """
+    result = await db.execute(select(Poste).where(Poste.id == poste_id))
+    poste = result.scalar_one_or_none()
+    if not poste:
+        raise HTTPException(status_code=404, detail="Poste introuvable")
+
+    blocages = await get_blocages_suppression_poste(db, poste)
+    if blocages:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Suppression impossible : désactivez le poste pour conserver l'historique.",
+                "blocages": blocages,
+            },
+        )
+
+    await db.delete(poste)
+    await db.commit()
