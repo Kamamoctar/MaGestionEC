@@ -55,7 +55,7 @@ async def lister(
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
     postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
-    await _get_courrier_avec_acces(courrier_id, db, postes)
+    courrier = await _get_courrier_avec_acces(courrier_id, db, postes)
     result = await db.execute(
         select(PieceJointe)
         .where(PieceJointe.courrier_id == courrier_id)
@@ -87,7 +87,7 @@ async def uploader(
         raise HTTPException(status_code=415, detail=f"Type de fichier non autorisé : {mime}")
 
     # Chemin : uploads/<courrier_id>/<uuid>_<nom_original>
-    dossier = Path(settings.UPLOADS_DIR) / courrier_id
+    dossier = Path(settings.UPLOADS_DIR) / (courrier.tenant_id or "legacy") / courrier_id
     dossier.mkdir(parents=True, exist_ok=True)
     nom_original = file.filename or "fichier"
     nom_stockage = f"{uuid.uuid4().hex}_{nom_original}"

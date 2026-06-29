@@ -5,6 +5,8 @@ export interface LoginResponse {
   access_token: string;
   token_type: string;
   utilisateur: Utilisateur;
+  tenant_id?: string | null;
+  tenant_nom?: string | null;
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {

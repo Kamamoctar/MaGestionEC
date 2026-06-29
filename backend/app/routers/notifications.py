@@ -34,6 +34,7 @@ async def _get_user_and_postes(token: str) -> tuple[Utilisateur, list[Poste]] | 
     try:
         payload = decode_access_token(token)
         user_id: str | None = payload.get("sub")
+        tenant_id: str | None = payload.get("tenant_id")
         if not user_id:
             return None
     except JWTError:
@@ -45,7 +46,7 @@ async def _get_user_and_postes(token: str) -> tuple[Utilisateur, list[Poste]] | 
         if not user:
             return None
 
-        postes = await get_postes_accessibles_by_user_id(db, user_id)
+        postes = await get_postes_accessibles_by_user_id(db, user_id, tenant_id)
         return user, postes
 
 

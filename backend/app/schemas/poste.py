@@ -22,6 +22,7 @@ class PosteOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: str
+    tenant_id: str | None = None
     intitule: str
     direction_id: str | None
     occupant_user_id: str | None

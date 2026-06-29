@@ -28,6 +28,7 @@ class Utilisateur(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relations
+    tenants: Mapped[list["TenantMembre"]] = relationship("TenantMembre", back_populates="utilisateur", cascade="all, delete-orphan")
     postes_occupes: Mapped[list["Poste"]] = relationship("Poste", back_populates="occupant", foreign_keys="Poste.occupant_user_id")
     affectations: Mapped[list["PosteAffectation"]] = relationship("PosteAffectation", back_populates="utilisateur")
     mouvements: Mapped[list["Mouvement"]] = relationship("Mouvement", back_populates="utilisateur")

@@ -8,7 +8,7 @@ from app.models.courrier import TypeCourrier, PrioriteCourrier, ConfidentialiteC
 class CourrierCreate(BaseModel):
     objet: str
     expediteur: str
-    poste_destinataire_id: str
+    poste_destinataire_id: str | None = None
     type: TypeCourrier
     priorite: PrioriteCourrier = PrioriteCourrier.normal
     confidentialite: ConfidentialiteCourrier = ConfidentialiteCourrier.normal
@@ -16,6 +16,7 @@ class CourrierCreate(BaseModel):
     flux_id: str | None = None
     reference_expediteur: str | None = None
     courrier_parent_id: str | None = None
+    tenant_destinataire_id: str | None = None
     dossier_id: str | None = None
 
 
@@ -37,6 +38,10 @@ class CourrierOut(BaseModel):
     expediteur: str
     reference_expediteur: str | None
     poste_destinataire_id: str
+    tenant_id: str | None = None
+    tenant_expediteur_id: str | None = None
+    tenant_destinataire_id: str | None = None
+    courrier_lie_id: str | None = None
     type: TypeCourrier
     priorite: PrioriteCourrier
     confidentialite: ConfidentialiteCourrier

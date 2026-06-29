@@ -1,4 +1,5 @@
 from app.models.utilisateur import Utilisateur, RoleFonctionnel
+from app.models.tenant import Tenant, TenantMembre
 from app.models.direction import Direction
 from app.models.poste import Poste, NiveauAcces
 from app.models.poste_affectation import PosteAffectation, TypeAffectation
@@ -10,6 +11,7 @@ from app.models.mouvement import Mouvement, ActionMouvement
 
 __all__ = [
     "Utilisateur", "RoleFonctionnel",
+    "Tenant", "TenantMembre",
     "Direction",
     "Poste", "NiveauAcces",
     "PosteAffectation", "TypeAffectation",

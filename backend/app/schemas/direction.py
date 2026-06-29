@@ -15,5 +15,6 @@ class DirectionOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: str
+    tenant_id: str | None = None
     nom: str
     description: str | None

@@ -20,11 +20,13 @@ class Flux(Base):
     __tablename__ = "flux"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=True, index=True)
     nom: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     bpmn_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+    tenant: Mapped["Tenant | None"] = relationship("Tenant", back_populates="flux")
     etapes: Mapped[list["FluxEtape"]] = relationship("FluxEtape", back_populates="flux", order_by="FluxEtape.ordre", cascade="all, delete-orphan")
     courriers: Mapped[list["Courrier"]] = relationship("Courrier", back_populates="flux")
 

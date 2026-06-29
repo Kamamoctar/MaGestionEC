@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import decode_token
 from app.database import get_db
 from app.models.courrier import Courrier, ConfidentialiteCourrier
+from app.models.tenant import Tenant
 from app.models.utilisateur import Utilisateur, RoleFonctionnel
 from app.models.poste import Poste, NiveauAcces
 from app.models.poste_affectation import PosteAffectation, TypeAffectation
@@ -41,10 +42,49 @@ async def get_current_user(
     return user
 
 
+async def get_current_tenant(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Tenant:
+    credentials_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Tenant invalide ou expire",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = decode_token(token)
+        tenant_id: str | None = payload.get("tenant_id")
+        if tenant_id is None:
+            raise credentials_error
+    except JWTError:
+        raise credentials_error
+
+    result = await db.execute(select(Tenant).where(Tenant.id == tenant_id, Tenant.is_active == True))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise credentials_error
+    return tenant
+
+
+async def get_current_role(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    current_user: Annotated[Utilisateur, Depends(get_current_user)],
+) -> RoleFonctionnel:
+    try:
+        payload = decode_token(token)
+        role_value = payload.get("role") or current_user.role_fonctionnel
+        return RoleFonctionnel(role_value)
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Role invalide")
+
+
 # Couche 1 : garde par rôle fonctionnel (contrôle les écrans/routes)
 def require_role(*roles: RoleFonctionnel):
-    async def _check(current_user: Annotated[Utilisateur, Depends(get_current_user)]) -> Utilisateur:
-        if current_user.role_fonctionnel not in roles:
+    async def _check(
+        current_user: Annotated[Utilisateur, Depends(get_current_user)],
+        current_role: Annotated[RoleFonctionnel, Depends(get_current_role)],
+    ) -> Utilisateur:
+        if current_role not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
         return current_user
     return _check
@@ -56,7 +96,14 @@ require_direction = require_role(RoleFonctionnel.admin, RoleFonctionnel.directio
 
 
 # Couche 2 : accès aux courriers calculé sur le POSTE du connecté + confidentialité
-async def get_postes_accessibles_by_user_id(db: AsyncSession, user_id: str) -> list[Poste]:
+def tenant_scope_condition(column, tenant_id: str | None):
+    """Filtre de transition : inclut les anciennes lignes sans tenant_id."""
+    if tenant_id is None:
+        return column.is_(None)
+    return or_(column == tenant_id, column.is_(None))
+
+
+async def get_postes_accessibles_by_user_id(db: AsyncSession, user_id: str, tenant_id: str | None = None) -> list[Poste]:
     """
     Retourne les postes dont l'utilisateur exerce actuellement les droits.
 
@@ -67,7 +114,11 @@ async def get_postes_accessibles_by_user_id(db: AsyncSession, user_id: str) -> l
     """
     direct_result = await db.execute(
         select(Poste)
-        .where(Poste.occupant_user_id == user_id, Poste.is_active == True)
+        .where(
+            Poste.occupant_user_id == user_id,
+            Poste.is_active == True,
+            tenant_scope_condition(Poste.tenant_id, tenant_id),
+        )
         .order_by(Poste.intitule)
     )
 
@@ -76,6 +127,7 @@ async def get_postes_accessibles_by_user_id(db: AsyncSession, user_id: str) -> l
         .join(PosteAffectation, PosteAffectation.poste_id == Poste.id)
         .where(
             Poste.is_active == True,
+            tenant_scope_condition(Poste.tenant_id, tenant_id),
             PosteAffectation.utilisateur_id == user_id,
             PosteAffectation.date_fin == None,
             PosteAffectation.type.in_([TypeAffectation.interim, TypeAffectation.delegation]),
@@ -91,18 +143,20 @@ async def get_postes_accessibles_by_user_id(db: AsyncSession, user_id: str) -> l
 
 async def get_postes_utilisateur(
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[Poste]:
     """Retourne tous les postes accessibles par l'utilisateur connecté."""
-    return await get_postes_accessibles_by_user_id(db, current_user.id)
+    return await get_postes_accessibles_by_user_id(db, current_user.id, current_tenant.id)
 
 
 async def get_poste_utilisateur(
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Poste | None:
     """Compatibilité : retourne le premier poste accessible par l'utilisateur connecté."""
-    postes = await get_postes_accessibles_by_user_id(db, current_user.id)
+    postes = await get_postes_accessibles_by_user_id(db, current_user.id, current_tenant.id)
     return postes[0] if postes else None
 
 

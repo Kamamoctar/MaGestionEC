@@ -22,6 +22,19 @@ const ADMIN_SECTIONS: Section[] = [
     ),
   },
   {
+    title: "Organisations",
+    content: (
+      <div className="space-y-2 text-sm text-gray-600">
+        <p>Chaque organisation dispose de son propre espace de travail. Les directions, postes, circuits, dossiers, courriers et tableaux de bord sont filtrés sur l'organisation active à la connexion.</p>
+        <ul className="list-disc pl-5 space-y-1 mt-2">
+          <li>Un utilisateur peut appartenir à plusieurs organisations avec un rôle différent selon l'organisation.</li>
+          <li>Les droits courriers restent calculés sur les postes de l'organisation courante.</li>
+          <li>Un courrier départ envoyé vers une autre organisation crée une arrivée liée dans son espace, sans partager les corbeilles internes.</li>
+        </ul>
+      </div>
+    ),
+  },
+  {
     title: "Gestion des Utilisateurs",
     content: (
       <div className="space-y-2 text-sm text-gray-600">
@@ -115,6 +128,7 @@ const USER_SECTIONS: Section[] = [
         <ul className="list-disc pl-5 space-y-1 mt-2">
           <li>Renseignez l'objet, l'expéditeur, le type (arrivée / départ / interne) et la priorité.</li>
           <li><strong>Circuit de traitement</strong> (optionnel) : sélectionnez un circuit BPMN. Le courrier est automatiquement dirigé vers la première étape du circuit — le champ « Poste destinataire » disparaît car le circuit définit le routage.</li>
+          <li><strong>Envoi vers une organisation</strong> : pour un courrier de type « Départ », choisissez une organisation destinataire. GEC conserve le courrier départ dans votre tenant et crée automatiquement un courrier « Arrivée » dans le tenant destinataire.</li>
           <li>Sans circuit : choisissez manuellement le poste destinataire. Le courrier peut ensuite être transmis de poste en poste via le bouton « Transmettre ».</li>
           <li>La référence (ARR-2026-XXXXXX / DEP / INT) est générée automatiquement.</li>
         </ul>

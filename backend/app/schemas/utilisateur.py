@@ -36,3 +36,5 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     utilisateur: UtilisateurOut
+    tenant_id: str | None = None
+    tenant_nom: str | None = None

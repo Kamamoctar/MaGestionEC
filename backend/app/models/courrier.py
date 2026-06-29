@@ -36,6 +36,7 @@ class Courrier(Base):
     __tablename__ = "courrier"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=True, index=True)
     reference: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     objet: Mapped[str] = mapped_column(String(500))
     expediteur: Mapped[str] = mapped_column(String(300))
@@ -52,6 +53,9 @@ class Courrier(Base):
 
     reference_expediteur: Mapped[str | None] = mapped_column(String(100), nullable=True)
     courrier_parent_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("courrier.id", ondelete="SET NULL"), nullable=True)
+    courrier_lie_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("courrier.id", ondelete="SET NULL"), nullable=True)
+    tenant_expediteur_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=True)
+    tenant_destinataire_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=True)
     dossier_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("dossier.id", ondelete="SET NULL"), nullable=True)
 
     flux_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("flux.id"), nullable=True)
@@ -67,6 +71,9 @@ class Courrier(Base):
         return etape.type_action if etape is not None else None
 
     # Relations
+    tenant: Mapped["Tenant | None"] = relationship("Tenant", foreign_keys=[tenant_id])
+    tenant_expediteur: Mapped["Tenant | None"] = relationship("Tenant", foreign_keys=[tenant_expediteur_id])
+    tenant_destinataire: Mapped["Tenant | None"] = relationship("Tenant", foreign_keys=[tenant_destinataire_id])
     poste_destinataire: Mapped["Poste"] = relationship("Poste", back_populates="courriers_recus", foreign_keys=[poste_destinataire_id])
     flux: Mapped["Flux | None"] = relationship("Flux", back_populates="courriers")
     etape_courante: Mapped["FluxEtape | None"] = relationship("FluxEtape", back_populates="courriers_en_cours", foreign_keys=[etape_courante_id])
@@ -76,4 +83,5 @@ class Courrier(Base):
 
     parent: Mapped["Courrier | None"] = relationship("Courrier", back_populates="reponses", remote_side="Courrier.id", foreign_keys=[courrier_parent_id])
     reponses: Mapped[list["Courrier"]] = relationship("Courrier", back_populates="parent", foreign_keys=[courrier_parent_id])
+    courrier_lie: Mapped["Courrier | None"] = relationship("Courrier", remote_side="Courrier.id", foreign_keys=[courrier_lie_id])
     dossier: Mapped["Dossier | None"] = relationship("Dossier", back_populates="courriers")

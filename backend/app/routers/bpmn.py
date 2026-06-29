@@ -5,10 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.auth import require_admin
+from app.core.auth import get_current_tenant, require_admin, tenant_scope_condition
 from app.database import get_db
 from app.models.flux import Flux, FluxEtape
 from app.models.poste import Poste
+from app.models.tenant import Tenant
 from app.schemas.bpmn import BpmnAnalyseOut, GenererFluxIn, LaneDetecteOut
 from app.schemas.flux import FluxOut
 from app.services.bpmn_service import analyser_bpmn
@@ -57,7 +58,11 @@ async def analyser(file: UploadFile = File(...)):
 
 @router.post("/generer", response_model=FluxOut, status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(require_admin)])
-async def generer(data: GenererFluxIn, db: Annotated[AsyncSession, Depends(get_db)]):
+async def generer(
+    data: GenererFluxIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
+):
     """
     Étape 2 — Génère le Flux + FluxEtape en base à partir du mapping validé par l'admin.
     Le mapping associe chaque lane_id à un poste_id réel de la base.
@@ -66,14 +71,19 @@ async def generer(data: GenererFluxIn, db: Annotated[AsyncSession, Depends(get_d
     # Vérifier que tous les postes existent
     mapping_index = {m.lane_id: m for m in data.mapping}
     poste_ids = [m.poste_id for m in data.mapping]
-    result = await db.execute(select(Poste).where(Poste.id.in_(poste_ids)))
+    result = await db.execute(
+        select(Poste).where(
+            Poste.id.in_(poste_ids),
+            tenant_scope_condition(Poste.tenant_id, current_tenant.id),
+        )
+    )
     postes_trouves = {p.id for p in result.scalars().all()}
     manquants = set(poste_ids) - postes_trouves
     if manquants:
         raise HTTPException(status_code=422, detail=f"Postes introuvables : {list(manquants)}")
 
     # Créer le Flux
-    flux = Flux(nom=data.nom, description=data.description, bpmn_source=data.bpmn_source)
+    flux = Flux(nom=data.nom, description=data.description, bpmn_source=data.bpmn_source, tenant_id=current_tenant.id)
     db.add(flux)
     await db.flush()
 
@@ -98,6 +108,6 @@ async def generer(data: GenererFluxIn, db: Annotated[AsyncSession, Depends(get_d
     result = await db.execute(
         select(Flux)
         .options(selectinload(Flux.etapes).selectinload(FluxEtape.poste))
-        .where(Flux.id == flux.id)
+        .where(Flux.id == flux.id, tenant_scope_condition(Flux.tenant_id, current_tenant.id))
     )
     return result.scalar_one()

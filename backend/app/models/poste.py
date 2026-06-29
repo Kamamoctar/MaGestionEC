@@ -16,6 +16,7 @@ class Poste(Base):
     __tablename__ = "poste"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=True, index=True)
     intitule: Mapped[str] = mapped_column(String(200))
     direction_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("direction.id"), nullable=True)
     # L'occupant courant — simple attribut dynamique, PAS la personne propriétaire des courriers
@@ -24,6 +25,7 @@ class Poste(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Relations
+    tenant: Mapped["Tenant | None"] = relationship("Tenant", back_populates="postes")
     direction: Mapped["Direction | None"] = relationship("Direction", back_populates="postes")
     occupant: Mapped["Utilisateur | None"] = relationship("Utilisateur", back_populates="postes_occupes", foreign_keys=[occupant_user_id])
     affectations: Mapped[list["PosteAffectation"]] = relationship("PosteAffectation", back_populates="poste", cascade="all, delete-orphan")

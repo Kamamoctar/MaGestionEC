@@ -16,6 +16,7 @@ class DossierOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: str
+    tenant_id: str | None = None
     titre: str
     description: str | None
     created_by_id: str

@@ -12,6 +12,7 @@ export interface Utilisateur {
 
 export interface Poste {
   id: string;
+  tenant_id?: string | null;
   intitule: string;
   direction_id: string | null;
   occupant_user_id: string | null;
@@ -21,11 +22,15 @@ export interface Poste {
 
 export interface Courrier {
   id: string;
+  tenant_id?: string | null;
   reference: string;
   objet: string;
   expediteur: string;
   reference_expediteur: string | null;
   poste_destinataire_id: string;
+  tenant_expediteur_id?: string | null;
+  tenant_destinataire_id?: string | null;
+  courrier_lie_id?: string | null;
   type: "arrivee" | "depart" | "interne";
   priorite: "normal" | "urgent" | "tres_urgent";
   confidentialite: "normal" | "confidentiel";
@@ -55,6 +60,7 @@ export interface CourrierLiaison {
 
 export interface Dossier {
   id: string;
+  tenant_id?: string | null;
   titre: string;
   description: string | null;
   created_by_id: string;
@@ -64,6 +70,7 @@ export interface Dossier {
 
 export interface Direction {
   id: string;
+  tenant_id?: string | null;
   nom: string;
   description: string | null;
 }
@@ -81,7 +88,16 @@ export interface FluxEtape {
 
 export interface Flux {
   id: string;
+  tenant_id?: string | null;
   nom: string;
   description: string | null;
   etapes: FluxEtape[];
+}
+
+export interface Tenant {
+  id: string;
+  nom: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
 }

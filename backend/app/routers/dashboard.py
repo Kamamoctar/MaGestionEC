@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import courrier_access_condition, get_current_user, get_postes_utilisateur
+from app.core.auth import courrier_access_condition, get_current_role, get_current_tenant, get_current_user, get_postes_utilisateur, tenant_scope_condition
 from app.database import get_db
 from app.models.courrier import Courrier, EtatCourrier
 from app.models.poste import Poste
+from app.models.tenant import Tenant
 from app.models.utilisateur import Utilisateur, RoleFonctionnel
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -18,14 +19,17 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 async def stats(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
+    current_role: Annotated[RoleFonctionnel, Depends(get_current_role)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
     postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     """KPIs globaux (admin) ou filtrés sur le poste de l'utilisateur connecté."""
     now = datetime.now(timezone.utc)
-    is_admin = current_user.role_fonctionnel == RoleFonctionnel.admin
+    is_admin = current_role == RoleFonctionnel.admin
 
     def scoped(q):
         """Filtre optionnel selon le rôle."""
+        q = q.where(tenant_scope_condition(Courrier.tenant_id, current_tenant.id))
         if not is_admin:
             return q.where(courrier_access_condition(postes))
         return q
@@ -58,6 +62,7 @@ async def stats(
                 ), else_=0)).label("en_retard"),
             )
             .join(Poste, Poste.id == Courrier.poste_destinataire_id)
+            .where(tenant_scope_condition(Courrier.tenant_id, current_tenant.id))
             .group_by(Poste.id, Poste.intitule)
             .order_by(func.count(Courrier.id).desc())
             .limit(8)

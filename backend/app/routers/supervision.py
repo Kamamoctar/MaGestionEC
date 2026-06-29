@@ -5,18 +5,22 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import require_admin
+from app.core.auth import get_current_tenant, require_admin, tenant_scope_condition
 from app.database import get_db
 from app.models.courrier import Courrier, EtatCourrier
 from app.models.direction import Direction
 from app.models.flux import Flux, FluxEtape
 from app.models.poste import Poste
+from app.models.tenant import Tenant
 
 router = APIRouter(prefix="/admin/supervision", tags=["supervision"])
 
 
 @router.get("", dependencies=[Depends(require_admin)])
-async def supervision(db: Annotated[AsyncSession, Depends(get_db)]):
+async def supervision(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
+):
     """
     Tableau de bord de pilotage admin :
     - Répartition des courriers par direction
@@ -41,7 +45,11 @@ async def supervision(db: Annotated[AsyncSession, Depends(get_db)]):
         )
         .join(Poste, Poste.id == Courrier.poste_destinataire_id)
         .join(Direction, Direction.id == Poste.direction_id)
-        .where(Poste.direction_id.isnot(None))
+        .where(
+            Poste.direction_id.isnot(None),
+            tenant_scope_condition(Courrier.tenant_id, current_tenant.id),
+            tenant_scope_condition(Poste.tenant_id, current_tenant.id),
+        )
         .group_by(Direction.id, Direction.nom)
         .order_by(func.count(Courrier.id).desc())
     )).all()
@@ -73,7 +81,11 @@ async def supervision(db: Annotated[AsyncSession, Depends(get_db)]):
         .join(FluxEtape, FluxEtape.flux_id == Flux.id)
         .join(Poste, Poste.id == FluxEtape.poste_id)
         .join(Courrier, Courrier.etape_courante_id == FluxEtape.id)
-        .where(Courrier.etat == EtatCourrier.en_cours)
+        .where(
+            Courrier.etat == EtatCourrier.en_cours,
+            tenant_scope_condition(Courrier.tenant_id, current_tenant.id),
+            tenant_scope_condition(Flux.tenant_id, current_tenant.id),
+        )
         .group_by(
             Flux.id, Flux.nom,
             FluxEtape.id, FluxEtape.ordre, FluxEtape.type_action,

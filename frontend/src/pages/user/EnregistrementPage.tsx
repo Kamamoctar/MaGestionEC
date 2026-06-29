@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { creerCourrier, getCourrier } from "../../api/courriers";
 import { getPostes } from "../../api/postes";
 import { getFlux } from "../../api/flux";
-import type { Courrier, Poste, Flux } from "../../types";
+import { getTenants } from "../../api/tenants";
+import type { Courrier, Poste, Flux, Tenant } from "../../types";
 
 export default function EnregistrementPage() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export default function EnregistrementPage() {
 
   const [postes, setPostes] = useState<Poste[]>([]);
   const [circuits, setCircuits] = useState<Flux[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [parentCourrier, setParentCourrier] = useState<Courrier | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -24,12 +26,14 @@ export default function EnregistrementPage() {
     confidentialite: "normal" as "normal" | "confidentiel",
     date_limite: "",
     flux_id: "" as string,
+    tenant_destinataire_id: "",
   });
 
   useEffect(() => {
-    Promise.all([getPostes(), getFlux()]).then(([ps, fx]) => {
+    Promise.all([getPostes(), getFlux(), getTenants()]).then(([ps, fx, ts]) => {
       setPostes(ps);
       setCircuits(fx);
+      setTenants(ts);
     });
   }, []);
 
@@ -50,7 +54,15 @@ export default function EnregistrementPage() {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       // Quand un circuit est sélectionné, le poste destinataire est géré automatiquement
-      if (field === "flux_id") next.poste_destinataire_id = "";
+      if (field === "flux_id") {
+        next.poste_destinataire_id = "";
+        if (value) next.tenant_destinataire_id = "";
+      }
+      if (field === "tenant_destinataire_id" && value) {
+        next.flux_id = "";
+        next.poste_destinataire_id = "";
+      }
+      if (field === "type" && value !== "depart") next.tenant_destinataire_id = "";
       return next;
     });
   }
@@ -72,7 +84,9 @@ export default function EnregistrementPage() {
         date_limite: form.date_limite ? new Date(form.date_limite).toISOString() : null,
       };
       if (parentId) payload.courrier_parent_id = parentId;
-      if (form.flux_id) {
+      if (form.tenant_destinataire_id) {
+        payload.tenant_destinataire_id = form.tenant_destinataire_id;
+      } else if (form.flux_id) {
         payload.flux_id = form.flux_id;
         // poste_destinataire_id sera déduit de la première étape côté backend
         payload.poste_destinataire_id = form.poste_destinataire_id || "placeholder";
@@ -86,8 +100,9 @@ export default function EnregistrementPage() {
     }
   }
 
-  const needsPoste = !form.flux_id;
-  const canSubmit = form.objet && form.expediteur && (form.flux_id || form.poste_destinataire_id);
+  const isInterTenant = form.type === "depart" && Boolean(form.tenant_destinataire_id);
+  const needsPoste = !form.flux_id && !isInterTenant;
+  const canSubmit = form.objet && form.expediteur && (isInterTenant || form.flux_id || form.poste_destinataire_id);
 
   return (
     <div className="max-w-2xl">
@@ -188,6 +203,22 @@ export default function EnregistrementPage() {
               <option value="interne">Interne</option>
             </select>
           </div>
+
+          {form.type === "depart" && tenants.length > 0 && (
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Organisation destinataire</label>
+              <select
+                value={form.tenant_destinataire_id}
+                onChange={(e) => set("tenant_destinataire_id", e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Aucune organisation externe</option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>{tenant.nom}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Priorité</label>

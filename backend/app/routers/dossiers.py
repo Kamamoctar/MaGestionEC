@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, require_secretariat
+from app.core.auth import get_current_tenant, get_current_user, require_secretariat, tenant_scope_condition
 from app.database import get_db
 from app.models.courrier import Courrier
 from app.models.dossier import Dossier
+from app.models.tenant import Tenant
 from app.models.utilisateur import Utilisateur
 from app.schemas.dossier import DossierCreate, DossierOut, DossierUpdate
 
@@ -18,10 +19,12 @@ router = APIRouter(prefix="/dossiers", tags=["dossiers"])
 async def lister(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[Utilisateur, Depends(get_current_user)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     result = await db.execute(
         select(Dossier, func.count(Courrier.id).label("nb_courriers"))
-        .outerjoin(Courrier, Courrier.dossier_id == Dossier.id)
+        .outerjoin(Courrier, (Courrier.dossier_id == Dossier.id) & tenant_scope_condition(Courrier.tenant_id, current_tenant.id))
+        .where(tenant_scope_condition(Dossier.tenant_id, current_tenant.id))
         .group_by(Dossier.id)
         .order_by(Dossier.created_at.desc())
     )
@@ -39,8 +42,9 @@ async def creer(
     data: DossierCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(require_secretariat)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
-    dossier = Dossier(titre=data.titre, description=data.description, created_by_id=current_user.id)
+    dossier = Dossier(titre=data.titre, description=data.description, created_by_id=current_user.id, tenant_id=current_tenant.id)
     db.add(dossier)
     await db.commit()
     await db.refresh(dossier)
@@ -54,11 +58,12 @@ async def obtenir(
     dossier_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[Utilisateur, Depends(get_current_user)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
     result = await db.execute(
         select(Dossier, func.count(Courrier.id).label("nb_courriers"))
-        .outerjoin(Courrier, Courrier.dossier_id == Dossier.id)
-        .where(Dossier.id == dossier_id)
+        .outerjoin(Courrier, (Courrier.dossier_id == Dossier.id) & tenant_scope_condition(Courrier.tenant_id, current_tenant.id))
+        .where(Dossier.id == dossier_id, tenant_scope_condition(Dossier.tenant_id, current_tenant.id))
         .group_by(Dossier.id)
     )
     row = result.one_or_none()
@@ -76,8 +81,11 @@ async def modifier(
     data: DossierUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[Utilisateur, Depends(require_secretariat)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
-    result = await db.execute(select(Dossier).where(Dossier.id == dossier_id))
+    result = await db.execute(
+        select(Dossier).where(Dossier.id == dossier_id, tenant_scope_condition(Dossier.tenant_id, current_tenant.id))
+    )
     dossier = result.scalar_one_or_none()
     if not dossier:
         raise HTTPException(status_code=404, detail="Dossier introuvable")
@@ -87,8 +95,8 @@ async def modifier(
 
     result2 = await db.execute(
         select(Dossier, func.count(Courrier.id).label("nb_courriers"))
-        .outerjoin(Courrier, Courrier.dossier_id == Dossier.id)
-        .where(Dossier.id == dossier_id)
+        .outerjoin(Courrier, (Courrier.dossier_id == Dossier.id) & tenant_scope_condition(Courrier.tenant_id, current_tenant.id))
+        .where(Dossier.id == dossier_id, tenant_scope_condition(Dossier.tenant_id, current_tenant.id))
         .group_by(Dossier.id)
     )
     row = result2.one()
@@ -102,8 +110,11 @@ async def supprimer(
     dossier_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[Utilisateur, Depends(require_secretariat)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
 ):
-    result = await db.execute(select(Dossier).where(Dossier.id == dossier_id))
+    result = await db.execute(
+        select(Dossier).where(Dossier.id == dossier_id, tenant_scope_condition(Dossier.tenant_id, current_tenant.id))
+    )
     dossier = result.scalar_one_or_none()
     if not dossier:
         raise HTTPException(status_code=404, detail="Dossier introuvable")

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.config import settings
 from app.database import Base
 from app.models.utilisateur import Utilisateur, RoleFonctionnel
+from app.models.tenant import Tenant, TenantMembre
 from app.models.direction import Direction
 from app.models.poste import Poste, NiveauAcces
 from app.models.poste_affectation import PosteAffectation, TypeAffectation
@@ -31,10 +32,38 @@ async def seed():
         await conn.run_sync(Base.metadata.create_all)
 
     async with Session() as db:
+        tenant_result = await db.execute(select(Tenant).where(Tenant.slug == "gec-demo"))
+        tenant = tenant_result.scalar_one_or_none()
+        if tenant is None:
+            tenant = Tenant(nom="GEC Demo", slug="gec-demo")
+            db.add(tenant)
+            await db.flush()
+
+        async def ensure_membre(user: Utilisateur, role: RoleFonctionnel):
+            membre_result = await db.execute(
+                select(TenantMembre).where(
+                    TenantMembre.tenant_id == tenant.id,
+                    TenantMembre.utilisateur_id == user.id,
+                )
+            )
+            if membre_result.scalar_one_or_none() is None:
+                db.add(TenantMembre(
+                    tenant_id=tenant.id,
+                    utilisateur_id=user.id,
+                    role_fonctionnel=role,
+                ))
+
         # Admin
         existing = await db.execute(select(Utilisateur).where(Utilisateur.email == "admin@gec.local"))
-        if existing.scalar_one_or_none():
-            print("Seed déjà effectué — base non modifiée.")
+        existing_admin = existing.scalar_one_or_none()
+        if existing_admin:
+            await ensure_membre(existing_admin, RoleFonctionnel.admin)
+            existing_sec = await db.execute(select(Utilisateur).where(Utilisateur.email == "secretariat@gec.local"))
+            sec_user = existing_sec.scalar_one_or_none()
+            if sec_user:
+                await ensure_membre(sec_user, RoleFonctionnel.secretariat)
+            await db.commit()
+            print("Seed déjà effectué — appartenances tenant vérifiées.")
             return
 
         admin = Utilisateur(
@@ -46,15 +75,17 @@ async def seed():
         )
         db.add(admin)
         await db.flush()
+        await ensure_membre(admin, RoleFonctionnel.admin)
 
         # Direction
-        dg = Direction(nom="Direction Générale", description="Direction principale")
+        dg = Direction(nom="Direction Générale", description="Direction principale", tenant_id=tenant.id)
         db.add(dg)
         await db.flush()
 
         # Poste
         poste_dg = Poste(
             intitule="Directeur Général",
+            tenant_id=tenant.id,
             direction_id=dg.id,
             occupant_user_id=admin.id,
             niveau_acces=NiveauAcces.confidentiel,
@@ -81,10 +112,12 @@ async def seed():
         )
         db.add(sec)
         await db.flush()
+        await ensure_membre(sec, RoleFonctionnel.secretariat)
 
         # Poste secrétariat
         poste_sec = Poste(
             intitule="Secrétariat Général",
+            tenant_id=tenant.id,
             direction_id=dg.id,
             occupant_user_id=sec.id,
             niveau_acces=NiveauAcces.normal,

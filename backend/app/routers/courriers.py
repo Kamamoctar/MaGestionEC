@@ -5,15 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, get_postes_utilisateur, poste_peut_acceder_courrier, require_secretariat
+from app.core.auth import get_current_tenant, get_current_user, get_postes_utilisateur, poste_peut_acceder_courrier, require_secretariat, tenant_scope_condition
 from app.database import get_db
 from app.models.courrier import Courrier, EtatCourrier
 from app.models.flux import FluxEtape
 from app.models.mouvement import Mouvement, ActionMouvement
 from app.models.poste import Poste
+from app.models.tenant import Tenant
 from app.models.utilisateur import Utilisateur
 from app.schemas.courrier import CourrierCreate, CourrierOut, CourrierUpdate, CourrierLiaisonOut, TransmettreCourrierIn, ActionCourrierIn
-from app.services.courrier_service import creer_courrier, transmettre_courrier, get_courriers_postes
+from app.services.courrier_service import creer_courrier, creer_courrier_intertenant, transmettre_courrier, get_courriers_postes
 
 router = APIRouter(prefix="/courriers", tags=["courriers"])
 
@@ -30,8 +31,16 @@ async def enregistrer(
     data: CourrierCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(require_secretariat)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
+    postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
-    return await creer_courrier(db, data.model_dump(), current_user)
+    try:
+        payload = data.model_dump()
+        if payload.get("tenant_destinataire_id"):
+            return await creer_courrier_intertenant(db, payload, current_user, current_tenant, postes)
+        return await creer_courrier(db, payload, current_user, current_tenant)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.get("/mes-corbeilles", response_model=list[CourrierOut])
@@ -273,6 +282,7 @@ async def transmettre(
     data: TransmettreCourrierIn,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
+    current_tenant: Annotated[Tenant, Depends(get_current_tenant)],
     postes: Annotated[list[Poste], Depends(get_postes_utilisateur)],
 ):
     result = await db.execute(select(Courrier).where(Courrier.id == courrier_id))
@@ -280,5 +290,14 @@ async def transmettre(
     if not courrier:
         raise HTTPException(status_code=404, detail="Courrier introuvable")
     _poste_autorise_courrier(courrier, postes)
+
+    poste_destination = await db.execute(
+        select(Poste).where(
+            Poste.id == data.poste_destination_id,
+            tenant_scope_condition(Poste.tenant_id, current_tenant.id),
+        )
+    )
+    if not poste_destination.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Poste destination introuvable")
 
     return await transmettre_courrier(db, courrier, data.poste_destination_id, current_user, data.commentaire)
